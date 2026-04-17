@@ -1,8 +1,7 @@
 """Session Service: append-only, idempotent event log for agent runs.
 
-S3 ships the schema plus `create_session` and `wake`. S4 completes the
-API with `emit_event` and `get_events`. See
-`docs/architecture/session-service.md`.
+Public surface: `SessionService` plus the Pydantic models and typed
+exceptions. See `docs/architecture/session-service.md`.
 """
 
 from tename.sessions.exceptions import (
@@ -18,9 +17,15 @@ from tename.sessions.models import (
     Session,
     SessionStatus,
 )
-from tename.sessions.service import SessionService
+from tename.sessions.service import (
+    MAX_EVENTS_LIMIT,
+    MAX_PAYLOAD_BYTES,
+    SessionService,
+)
 
 __all__ = [
+    "MAX_EVENTS_LIMIT",
+    "MAX_PAYLOAD_BYTES",
     "Agent",
     "Event",
     "EventType",
