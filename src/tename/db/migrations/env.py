@@ -3,6 +3,9 @@
 Reads the database URL from the ``TENAME_DATABASE_URL`` environment
 variable (falling back to ``sqlalchemy.url`` in ``alembic.ini``). Keeps
 app and migration connection config in a single place.
+
+Importing ``tename.sessions.schema`` registers its tables on the shared
+metadata as a side effect, which is what Alembic's autogenerate needs.
 """
 
 from __future__ import annotations
@@ -13,6 +16,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from tename.db.schema import metadata
+from tename.sessions import (
+    schema as _sessions_schema,  # noqa: F401  # pyright: ignore[reportUnusedImport]
+)
+
 config = context.config
 
 if config.config_file_name is not None:
@@ -22,8 +30,7 @@ database_url = os.getenv("TENAME_DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
-# S3 will import the ORM metadata here for autogenerate support.
-target_metadata = None
+target_metadata = metadata
 
 
 def run_migrations_offline() -> None:

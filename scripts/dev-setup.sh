@@ -14,6 +14,7 @@ fi
 POSTGRES_USER="${POSTGRES_USER:-tename}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-tename}"
 POSTGRES_DB="${POSTGRES_DB:-tename_dev}"
+POSTGRES_TEST_DB="${POSTGRES_TEST_DB:-tename_test}"
 POSTGRES_PORT="${POSTGRES_PORT:-5433}"
 
 echo "Starting Tename Postgres on port ${POSTGRES_PORT}..."
@@ -37,12 +38,27 @@ if [[ "$status" != "healthy" ]]; then
   exit 1
 fi
 
+# Ensure the integration-test database exists. `postgres` is the
+# maintenance DB we connect to for the CREATE DATABASE check.
+if ! docker exec tename-postgres \
+    psql -U "${POSTGRES_USER}" -d postgres -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = '${POSTGRES_TEST_DB}'" \
+    | grep -q 1; then
+  echo "Creating test database ${POSTGRES_TEST_DB}..."
+  docker exec tename-postgres \
+    psql -U "${POSTGRES_USER}" -d postgres \
+    -c "CREATE DATABASE ${POSTGRES_TEST_DB} OWNER ${POSTGRES_USER};" >/dev/null
+fi
+
 cat <<EOF
 
 Tename dev stack is up.
 
-  Connection string:
+  Dev connection string:
     postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}
+
+  Test connection string:
+    postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_TEST_DB}
 
   Psql shell:
     docker compose --profile tools run --rm dev-tools
