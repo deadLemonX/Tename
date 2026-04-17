@@ -1,0 +1,45 @@
+name: tename
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tename-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tename}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tename}
+      POSTGRES_DB: ${POSTGRES_DB:-tename_dev}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - tename_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-tename} -d ${POSTGRES_DB:-tename_dev}",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  # On-demand shell with psql. Start with: `docker compose --profile tools run --rm dev-tools`
+  dev-tools:
+    image: postgres:16-alpine
+    container_name: tename-dev-tools
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-tename}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-tename}
+      PGDATABASE: ${POSTGRES_DB:-tename_dev}
+    entrypoint: ["psql"]
+
+volumes:
+  tename_pgdata:
+    name: tename_pgdata
