@@ -19,7 +19,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from tename.sessions.exceptions import NotFoundError
-from tename.sessions.models import Event, EventType, Session, SessionStatus
+from tename.sessions.models import Agent, Event, EventType, Session, SessionStatus
+from tename.sessions.schema import agents as agents_table
 from tename.sessions.schema import events as events_table
 from tename.sessions.schema import sessions as sessions_table
 
@@ -34,6 +35,20 @@ def _row_to_session(row: Any) -> Session:
         metadata=dict(row.metadata) if row.metadata is not None else {},
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _row_to_agent(row: Any) -> Agent:
+    return Agent(
+        id=row.id,
+        tenant_id=row.tenant_id,
+        name=row.name,
+        model=row.model,
+        framework=row.framework,
+        system_prompt=row.system_prompt,
+        tools=list(row.tools) if row.tools is not None else [],
+        sandbox_recipe=dict(row.sandbox_recipe) if row.sandbox_recipe is not None else None,
+        created_at=row.created_at,
     )
 
 
@@ -109,6 +124,33 @@ async def update_session_status(
         sessions_table.update().where(sessions_table.c.id == session_id).values(status=status.value)
     )
     await conn.execute(stmt)
+
+
+async def get_agent(conn: AsyncConnection, agent_id: UUID) -> Agent:
+    """Fetch an agent by id. Raises NotFoundError if absent."""
+    stmt = select(*agents_table.c).where(agents_table.c.id == agent_id)
+    result = await conn.execute(stmt)
+    row = result.first()
+    if row is None:
+        raise NotFoundError(f"agent {agent_id} does not exist")
+    return _row_to_agent(row)
+
+
+async def mark_session_complete(conn: AsyncConnection, session_id: UUID) -> SessionStatus:
+    """Transition an active session to COMPLETED; no-op on terminal state.
+
+    Returns the resulting status. Raises NotFoundError if absent.
+    """
+    session = await get_session(conn, session_id)
+    if session.is_terminal:
+        return session.status
+    stmt = (
+        sessions_table.update()
+        .where(sessions_table.c.id == session_id)
+        .values(status=SessionStatus.COMPLETED.value, updated_at=text("NOW()"))
+    )
+    await conn.execute(stmt)
+    return SessionStatus.COMPLETED
 
 
 async def acquire_session_advisory_lock(conn: AsyncConnection, session_id: UUID) -> None:
@@ -230,10 +272,12 @@ __all__ = [
     "acquire_session_advisory_lock",
     "find_event_by_id",
     "find_session_by_request_id",
+    "get_agent",
     "get_session",
     "insert_event_and_bump_sequence",
     "insert_session",
     "load_session_for_emit",
+    "mark_session_complete",
     "select_events",
     "update_session_status",
 ]

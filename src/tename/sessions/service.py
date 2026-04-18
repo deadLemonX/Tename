@@ -1,8 +1,9 @@
 """Public API for the Session Service.
 
-Scope: `create_session` (idempotent on request_id), `wake`,
-`emit_event` (advisory-lock serialized, idempotent on event_id), and
-`get_events` (keyset pagination over sequence).
+Scope: `create_session` (idempotent on request_id), `wake`, `get_agent`,
+`mark_complete` (idempotent terminal transition), `emit_event`
+(advisory-lock serialized, idempotent on event_id), and `get_events`
+(keyset pagination over sequence).
 
 The service owns its own async engine. Callers pass a SQLAlchemy URL
 on construction and `await service.close()` when finished. Integration
@@ -20,16 +21,25 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from tename.sessions.exceptions import FailedPreconditionError, ValidationError
-from tename.sessions.models import TERMINAL_STATUSES, Event, EventType, Session
+from tename.sessions.models import (
+    TERMINAL_STATUSES,
+    Agent,
+    Event,
+    EventType,
+    Session,
+    SessionStatus,
+)
 from tename.sessions.schema import DEFAULT_TENANT_ID
 from tename.sessions.store import (
     acquire_session_advisory_lock,
     find_event_by_id,
     find_session_by_request_id,
+    get_agent,
     get_session,
     insert_event_and_bump_sequence,
     insert_session,
     load_session_for_emit,
+    mark_session_complete,
     select_events,
 )
 
@@ -154,6 +164,37 @@ class SessionService:
             extra={**log_ctx, "session_id": str(session.id)},
         )
         return session
+
+    async def get_agent(self, agent_id: UUID) -> Agent:
+        """Read-only lookup of an agent row.
+
+        Raises:
+            NotFoundError: agent does not exist.
+        """
+        async with self._engine.connect() as conn:
+            agent = await get_agent(conn, agent_id)
+        logger.info(
+            "agent.get.ok",
+            extra={"agent_id": str(agent_id)},
+        )
+        return agent
+
+    async def mark_complete(self, session_id: UUID) -> SessionStatus:
+        """Transition a session to COMPLETED. Idempotent on terminal state.
+
+        Returns the resulting status. Sessions already in a terminal
+        state are returned unchanged (no exception).
+
+        Raises:
+            NotFoundError: session does not exist.
+        """
+        async with self._engine.begin() as conn:
+            status = await mark_session_complete(conn, session_id)
+        logger.info(
+            "session.mark_complete.ok",
+            extra={"session_id": str(session_id), "status": status.value},
+        )
+        return status
 
     async def wake(self, session_id: UUID) -> Session:
         """Read-only lookup of a session.

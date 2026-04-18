@@ -1,6 +1,6 @@
 """Harness Runtime: stateless loop that drives agent turns.
 
-Public API (S6):
+Public API:
 
     from tename.harness import (
         HarnessRuntime,
@@ -12,10 +12,12 @@ Public API (S6):
         VanillaAdapter,
     )
 
-The core loop lands in S7; S6 ships the skeleton: profile loading with
-`extends` inheritance and validation, the adapter ABC plus registry,
-the vanilla adapter, and a `HarnessRuntime` whose `run_session` raises
-`NotImplementedError`. See docs/architecture/harness-runtime.md.
+S6 shipped the skeleton (profile loading, adapter registry, vanilla
+adapter). S7 fills in `HarnessRuntime.run_session`: the stateless core
+loop that wakes a session, streams a model completion per turn, emits
+incremental + consolidated events, stubs tool execution, truncates via
+compaction when context grows too large, and marks the session complete
+when stop conditions fire. See `docs/architecture/harness-runtime.md`.
 """
 
 from tename.harness.adapters import (
@@ -26,6 +28,13 @@ from tename.harness.adapters import (
     get_adapter,
     known_adapters,
     register_adapter,
+)
+from tename.harness.compaction import (
+    CompactionDecision,
+    apply_compaction_view,
+    estimate_event_tokens,
+    plan_truncate,
+    should_compact,
 )
 from tename.harness.profiles import (
     BUNDLED_PROFILES_PACKAGE,
@@ -41,10 +50,12 @@ from tename.harness.profiles import (
     StopConditions,
     ToolFormat,
 )
-from tename.harness.service import HarnessRuntime
+from tename.harness.service import SYSTEM_PROMPT_UUID_NAMESPACE, HarnessRuntime
 
 __all__ = [
     "BUNDLED_PROFILES_PACKAGE",
+    "SYSTEM_PROMPT_UUID_NAMESPACE",
+    "CompactionDecision",
     "CompactionStrategy",
     "ContextConfig",
     "FrameworkAdapter",
@@ -61,7 +72,11 @@ __all__ = [
     "ToolFormat",
     "UnknownAdapterError",
     "VanillaAdapter",
+    "apply_compaction_view",
+    "estimate_event_tokens",
     "get_adapter",
     "known_adapters",
+    "plan_truncate",
     "register_adapter",
+    "should_compact",
 ]
