@@ -155,9 +155,7 @@ class AnthropicProvider(ProviderInterface):
                 )
             except (anthropic.APIConnectionError, anthropic.APITimeoutError) as exc:
                 logger.warning("anthropic mid-stream connection error", exc_info=exc)
-                mid_stream_error = error_chunk(
-                    message=str(exc), retryable=True, status_code=None
-                )
+                mid_stream_error = error_chunk(message=str(exc), retryable=True, status_code=None)
         finally:
             await manager.__aexit__(None, None, None)
 

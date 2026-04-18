@@ -48,12 +48,8 @@ async def test_router_dispatches_to_provider_by_name() -> None:
     provider = _ScriptedProvider(chunks)
     router = ModelRouter(providers={"anthropic": provider})
 
-    profile = RouterProfile(
-        model=ModelConfig(provider="anthropic", model_id="claude-opus-4-6")
-    )
-    out = await _collect(
-        router.complete(profile, [Message(role="user", content="hi")])
-    )
+    profile = RouterProfile(model=ModelConfig(provider="anthropic", model_id="claude-opus-4-6"))
+    out = await _collect(router.complete(profile, [Message(role="user", content="hi")]))
 
     assert len(provider.calls) == 1
     assert [c.type for c in out] == ["text_delta", "usage", "done"]
@@ -65,9 +61,7 @@ async def test_router_rejects_unknown_provider() -> None:
         model=ModelConfig(provider="openai", model_id="gpt-5"),
     )
     with pytest.raises(ValueError, match="no provider registered"):
-        _ = await _collect(
-            router.complete(profile, [Message(role="user", content="hi")])
-        )
+        _ = await _collect(router.complete(profile, [Message(role="user", content="hi")]))
 
 
 async def test_router_enriches_usage_with_cost_from_default_table() -> None:
@@ -78,9 +72,7 @@ async def test_router_enriches_usage_with_cost_from_default_table() -> None:
     profile = RouterProfile(
         model=ModelConfig(provider="anthropic", model_id="claude-opus-4-6"),
     )
-    out = await _collect(
-        router.complete(profile, [Message(role="user", content="hi")])
-    )
+    out = await _collect(router.complete(profile, [Message(role="user", content="hi")]))
     u = next(c for c in out if c.type == "usage")
     assert u.content["cost_usd"] is not None
     assert u.content["cost_usd"] > 0
@@ -99,9 +91,7 @@ async def test_router_honors_profile_pricing_override() -> None:
         model=ModelConfig(provider="anthropic", model_id="claude-opus-4-6"),
         pricing=override,
     )
-    out = await _collect(
-        router.complete(profile, [Message(role="user", content="hi")])
-    )
+    out = await _collect(router.complete(profile, [Message(role="user", content="hi")]))
     u = next(c for c in out if c.type == "usage")
     assert u.content["cost_usd"] == pytest.approx(1.0)
 
@@ -113,9 +103,7 @@ async def test_router_leaves_cost_none_when_no_pricing() -> None:
     profile = RouterProfile(
         model=ModelConfig(provider="anthropic", model_id="ghost-model"),
     )
-    out = await _collect(
-        router.complete(profile, [Message(role="user", content="hi")])
-    )
+    out = await _collect(router.complete(profile, [Message(role="user", content="hi")]))
     u = next(c for c in out if c.type == "usage")
     assert u.content["cost_usd"] is None
 

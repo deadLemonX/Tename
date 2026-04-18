@@ -111,9 +111,7 @@ async def update_session_status(
     await conn.execute(stmt)
 
 
-async def acquire_session_advisory_lock(
-    conn: AsyncConnection, session_id: UUID
-) -> None:
+async def acquire_session_advisory_lock(conn: AsyncConnection, session_id: UUID) -> None:
     """Take a transaction-scoped advisory lock keyed on session_id.
 
     Serializes concurrent `emit_event` calls for the same session so
@@ -126,9 +124,7 @@ async def acquire_session_advisory_lock(
     )
 
 
-async def find_event_by_id(
-    conn: AsyncConnection, session_id: UUID, event_id: UUID
-) -> Event | None:
+async def find_event_by_id(conn: AsyncConnection, session_id: UUID, event_id: UUID) -> Event | None:
     """Look up an event by its (session_id, id) primary key."""
     stmt = select(*events_table.c).where(
         events_table.c.session_id == session_id,
@@ -148,9 +144,9 @@ async def load_session_for_emit(
     emit_event can make both its terminal-state and sequence decisions
     without a second round-trip.
     """
-    stmt = select(
-        sessions_table.c.last_sequence, sessions_table.c.status
-    ).where(sessions_table.c.id == session_id)
+    stmt = select(sessions_table.c.last_sequence, sessions_table.c.status).where(
+        sessions_table.c.id == session_id
+    )
     result = await conn.execute(stmt)
     row = result.first()
     if row is None:

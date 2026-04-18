@@ -48,8 +48,7 @@ class ModelRouter:
         provider = self._providers.get(provider_name)
         if provider is None:
             raise ValueError(
-                f"no provider registered for '{provider_name}'. "
-                f"Known: {sorted(self._providers)}"
+                f"no provider registered for '{provider_name}'. Known: {sorted(self._providers)}"
             )
 
         logger.debug(

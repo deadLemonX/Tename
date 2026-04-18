@@ -1,0 +1,46 @@
+model:
+  provider: anthropic
+  model_id: claude-opus-4-6
+  display_name: "Claude Opus 4.6"
+  description: |
+    Anthropic's flagship model as of early 2026. Strong at agentic tasks,
+    coding, and long-form reasoning. This is Tename's default profile.
+
+context:
+  max_tokens: 200000
+  effective_budget: 160000
+  compaction_threshold: 128000
+  compaction_strategy: truncate
+  keep_last_n_events: 20
+
+caching:
+  provider_strategy: explicit_breakpoints
+  breakpoints:
+    - after: system_prompt
+    - after: compaction_summary
+  cache_ttl_seconds: 300
+
+tool_format: anthropic_tool_use
+
+stop_conditions:
+  no_tool_calls_for: 1
+  max_turns: 50
+  max_duration_seconds: 3600
+
+error_handling:
+  retry_on_transient: true
+  max_retries: 3
+  backoff_base_seconds: 1.0
+  backoff_multiplier: 2.0
+
+sampling:
+  temperature: 0.7
+  top_p: 1.0
+  max_tokens: 8192
+
+quirks: []
+
+pricing:
+  input_per_million: 15.00
+  output_per_million: 75.00
+  cached_input_per_million: 1.50

@@ -41,10 +41,7 @@ class FakeStream:
         return self
 
     async def __anext__(self) -> Any:
-        if (
-            self._mid_stream_exc is not None
-            and self._i >= self._raise_after_n
-        ):
+        if self._mid_stream_exc is not None and self._i >= self._raise_after_n:
             raise self._mid_stream_exc
         if self._i >= len(self._events):
             raise StopAsyncIteration
@@ -138,9 +135,7 @@ def content_block_start_text(*, index: int) -> Any:
     )
 
 
-def content_block_start_tool_use(
-    *, index: int, tool_id: str, name: str
-) -> Any:
+def content_block_start_tool_use(*, index: int, tool_id: str, name: str) -> Any:
     return SimpleNamespace(
         type="content_block_start",
         index=index,

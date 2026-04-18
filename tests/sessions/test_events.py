@@ -135,9 +135,7 @@ async def test_concurrent_writers(service: SessionService, agent_id: UUID) -> No
     assert reloaded.last_sequence == workers * per_worker
 
 
-async def test_large_payload_rejected(
-    service: SessionService, agent_id: UUID
-) -> None:
+async def test_large_payload_rejected(service: SessionService, agent_id: UUID) -> None:
     """>256 KiB payload rejected before a DB write is attempted."""
     session = await service.create_session(agent_id)
 
@@ -194,9 +192,7 @@ async def test_get_events_pagination(service: SessionService, agent_id: UUID) ->
     batches: list[list[Event]] = []
     cursor = 1
     while cursor <= 500:
-        batch = await service.get_events(
-            session.id, start=cursor, end=cursor + 99, limit=100
-        )
+        batch = await service.get_events(session.id, start=cursor, end=cursor + 99, limit=100)
         assert len(batch) == 100
         batches.append(batch)
         cursor += 100
@@ -270,9 +266,7 @@ async def test_performance_read(service: SessionService, agent_id: UUID) -> None
     samples: list[float] = []
     for _ in range(iterations):
         t0 = time.perf_counter()
-        events = await service.get_events(
-            session.id, start=total - 99, end=total, limit=100
-        )
+        events = await service.get_events(session.id, start=total - 99, end=total, limit=100)
         samples.append((time.perf_counter() - t0) * 1000.0)
         assert len(events) == 100
         assert events[0].sequence == total - 99

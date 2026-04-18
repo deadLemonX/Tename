@@ -32,9 +32,7 @@ def test_lookup_pricing_unknown_returns_none() -> None:
 
 def test_lookup_pricing_override_wins() -> None:
     override = Pricing(input_per_million=1.0, output_per_million=2.0)
-    p = lookup_pricing(
-        provider="anthropic", model_id="claude-opus-4-6", override=override
-    )
+    p = lookup_pricing(provider="anthropic", model_id="claude-opus-4-6", override=override)
     assert p is override
 
 

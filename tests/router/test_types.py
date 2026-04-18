@@ -34,9 +34,7 @@ def test_text_delta_factory() -> None:
 def test_tool_call_factories_encode_schema() -> None:
     start = tool_call_start(tool_id="t1", tool_name="bash", index=0)
     delta = tool_call_delta(tool_id="t1", partial_json='{"cmd":"ls"', index=0)
-    end = tool_call_end(
-        tool_id="t1", tool_name="bash", tool_input={"cmd": "ls"}, index=0
-    )
+    end = tool_call_end(tool_id="t1", tool_name="bash", tool_input={"cmd": "ls"}, index=0)
 
     assert start.content == {"tool_id": "t1", "tool_name": "bash", "index": 0}
     assert delta.content == {

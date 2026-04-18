@@ -73,9 +73,7 @@ async def test_streaming_yields_text_deltas_in_order() -> None:
         message_stop(),
     ]
     provider, _ = _provider_with([FakeStreamManager(FakeStream(events))])
-    chunks = await _collect(
-        provider, messages=[Message(role="user", content="hi")]
-    )
+    chunks = await _collect(provider, messages=[Message(role="user", content="hi")])
 
     text_chunks = [c for c in chunks if c.type == "text_delta"]
     assert [c.content["text"] for c in text_chunks] == ["Hel", "lo", ", ", "world", "!"]
@@ -95,9 +93,7 @@ async def test_tool_use_translation() -> None:
         message_stop(),
     ]
     provider, _ = _provider_with([FakeStreamManager(FakeStream(events))])
-    chunks = await _collect(
-        provider, messages=[Message(role="user", content="list files")]
-    )
+    chunks = await _collect(provider, messages=[Message(role="user", content="list files")])
 
     kinds = [c.type for c in chunks]
     assert kinds == [
@@ -116,9 +112,7 @@ async def test_tool_use_translation() -> None:
 
 async def test_usage_captured_from_stream() -> None:
     events = [
-        message_start_event(
-            input_tokens=500, output_tokens=2, cache_read_input_tokens=120
-        ),
+        message_start_event(input_tokens=500, output_tokens=2, cache_read_input_tokens=120),
         content_block_start_text(index=0),
         content_block_delta_text(index=0, text="ok"),
         content_block_stop(index=0),
@@ -160,9 +154,7 @@ async def test_retry_on_500_then_success() -> None:
         }
     )
     provider, fake = _provider_with(managers)
-    chunks = [
-        c async for c in provider.complete(profile, [Message(role="user", content="x")])
-    ]
+    chunks = [c async for c in provider.complete(profile, [Message(role="user", content="x")])]
     assert len(fake.messages.calls) == 2
     # No error chunk in output — retry succeeded.
     assert not any(c.type == "error" for c in chunks)
@@ -176,9 +168,7 @@ async def test_no_retry_on_400() -> None:
         body={"error": "bad"},
     )
     provider, fake = _provider_with([FakeStreamManager(None, open_exc=err)])
-    chunks = [
-        c async for c in provider.complete(PROFILE, [Message(role="user", content="x")])
-    ]
+    chunks = [c async for c in provider.complete(PROFILE, [Message(role="user", content="x")])]
     assert len(fake.messages.calls) == 1
     assert len(chunks) == 1
     assert chunks[0].type == "error"
@@ -201,9 +191,7 @@ async def test_retries_exhausted_yields_error_chunk() -> None:
         }
     )
     provider, fake = _provider_with(managers)
-    chunks = [
-        c async for c in provider.complete(profile, [Message(role="user", content="x")])
-    ]
+    chunks = [c async for c in provider.complete(profile, [Message(role="user", content="x")])]
     # 1 initial attempt + 3 retries = 4 stream() calls.
     assert len(fake.messages.calls) == 4
     assert len(chunks) == 1
@@ -220,9 +208,7 @@ async def test_mid_stream_error_emits_error_chunk_and_exits() -> None:
     err = anthropic.APIConnectionError(request=_fake_request())
     stream = FakeStream(events, mid_stream_exc=err, raise_after_n=len(events))
     provider, _ = _provider_with([FakeStreamManager(stream)])
-    chunks = [
-        c async for c in provider.complete(PROFILE, [Message(role="user", content="x")])
-    ]
+    chunks = [c async for c in provider.complete(PROFILE, [Message(role="user", content="x")])]
     # We should see the text_delta we got before the error, then an error chunk.
     assert any(c.type == "text_delta" for c in chunks)
     assert chunks[-1].type == "error"
@@ -240,9 +226,7 @@ async def test_system_prompt_cache_control_applied_when_profile_requests() -> No
             ),
         }
     )
-    provider, fake = _provider_with(
-        [FakeStreamManager(FakeStream([message_stop()]))]
-    )
+    provider, fake = _provider_with([FakeStreamManager(FakeStream([message_stop()]))])
     _ = [
         c
         async for c in provider.complete(
@@ -259,9 +243,7 @@ async def test_system_prompt_cache_control_applied_when_profile_requests() -> No
 
 
 async def test_system_prompt_cache_control_absent_by_default() -> None:
-    provider, fake = _provider_with(
-        [FakeStreamManager(FakeStream([message_stop()]))]
-    )
+    provider, fake = _provider_with([FakeStreamManager(FakeStream([message_stop()]))])
     _ = [
         c
         async for c in provider.complete(
@@ -277,24 +259,16 @@ async def test_system_prompt_cache_control_absent_by_default() -> None:
 
 
 async def test_tool_role_folds_into_user_with_tool_result_block() -> None:
-    provider, fake = _provider_with(
-        [FakeStreamManager(FakeStream([message_stop()]))]
-    )
+    provider, fake = _provider_with([FakeStreamManager(FakeStream([message_stop()]))])
     msgs = [
         Message(role="user", content="run ls"),
         Message(
             role="assistant",
-            content=[
-                ContentBlock(
-                    type="tool_use", id="t1", name="bash", input={"cmd": "ls"}
-                )
-            ],
+            content=[ContentBlock(type="tool_use", id="t1", name="bash", input={"cmd": "ls"})],
         ),
         Message(
             role="tool",
-            content=[
-                ContentBlock(type="tool_result", tool_use_id="t1", content="a b c")
-            ],
+            content=[ContentBlock(type="tool_result", tool_use_id="t1", content="a b c")],
         ),
     ]
     _ = [c async for c in provider.complete(PROFILE, msgs)]
@@ -306,9 +280,7 @@ async def test_tool_role_folds_into_user_with_tool_result_block() -> None:
 
 async def test_temperature_and_top_p_are_mutually_exclusive() -> None:
     # Default top_p=1.0 → send temperature, omit top_p (matches Opus 4.6 API).
-    provider, fake = _provider_with(
-        [FakeStreamManager(FakeStream([message_stop()]))]
-    )
+    provider, fake = _provider_with([FakeStreamManager(FakeStream([message_stop()]))])
     _ = [c async for c in provider.complete(PROFILE, [Message(role="user", content="x")])]
     call = fake.messages.calls[0]
     assert "temperature" in call
@@ -318,9 +290,7 @@ async def test_temperature_and_top_p_are_mutually_exclusive() -> None:
     narrowed = PROFILE.model_copy(
         update={"sampling": PROFILE.sampling.model_copy(update={"top_p": 0.5})}
     )
-    provider, fake = _provider_with(
-        [FakeStreamManager(FakeStream([message_stop()]))]
-    )
+    provider, fake = _provider_with([FakeStreamManager(FakeStream([message_stop()]))])
     _ = [c async for c in provider.complete(narrowed, [Message(role="user", content="x")])]
     call = fake.messages.calls[0]
     assert "top_p" in call
@@ -329,9 +299,7 @@ async def test_temperature_and_top_p_are_mutually_exclusive() -> None:
 
 
 async def test_tools_are_forwarded() -> None:
-    provider, fake = _provider_with(
-        [FakeStreamManager(FakeStream([message_stop()]))]
-    )
+    provider, fake = _provider_with([FakeStreamManager(FakeStream([message_stop()]))])
     tools = [
         ToolDef(
             name="bash",
@@ -339,12 +307,7 @@ async def test_tools_are_forwarded() -> None:
             input_schema={"type": "object", "properties": {"cmd": {"type": "string"}}},
         )
     ]
-    _ = [
-        c
-        async for c in provider.complete(
-            PROFILE, [Message(role="user", content="hi")], tools
-        )
-    ]
+    _ = [c async for c in provider.complete(PROFILE, [Message(role="user", content="hi")], tools)]
     api_tools = fake.messages.calls[0]["tools"]
     assert api_tools[0]["name"] == "bash"
     assert "input_schema" in api_tools[0]

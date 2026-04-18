@@ -299,9 +299,7 @@ class SessionService:
         if effective_start < 1:
             raise ValidationError(f"start must be >= 1 (got {start})")
         if end is not None and end < effective_start:
-            raise ValidationError(
-                f"end ({end}) must be >= start ({effective_start})"
-            )
+            raise ValidationError(f"end ({end}) must be >= start ({effective_start})")
 
         async with self._engine.connect() as conn:
             events = await select_events(

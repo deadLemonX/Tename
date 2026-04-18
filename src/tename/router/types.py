@@ -90,9 +90,7 @@ def done_chunk() -> ModelChunk:
     return ModelChunk(type="done", content={})
 
 
-def error_chunk(
-    *, message: str, retryable: bool, status_code: int | None = None
-) -> ModelChunk:
+def error_chunk(*, message: str, retryable: bool, status_code: int | None = None) -> ModelChunk:
     return ModelChunk(
         type="error",
         content={
@@ -169,9 +167,7 @@ class ToolDef(BaseModel):
 # tool_format, quirks) and is expected to reuse these exact models.
 
 ProviderType = Literal["anthropic", "openai", "google", "openai_compatible"]
-CachingStrategy = Literal[
-    "explicit_breakpoints", "automatic_prefix", "explicit_api", "none"
-]
+CachingStrategy = Literal["explicit_breakpoints", "automatic_prefix", "explicit_api", "none"]
 
 
 class ModelConfig(BaseModel):
