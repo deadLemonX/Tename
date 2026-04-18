@@ -1,0 +1,18 @@
+# Provider pricing table used by the Model Router to compute cost_usd on
+# usage chunks. Prices are USD per million tokens.
+#
+# Users can override by supplying their own pricing.yaml and passing it
+# to the ModelRouter, or by placing a pricing block on the profile.
+#
+# Schema:
+#   <provider>:
+#     <model_id>:
+#       input_per_million: float
+#       output_per_million: float
+#       cached_input_per_million: float   # optional; provider-dependent
+
+anthropic:
+  claude-opus-4-6:
+    input_per_million: 15.00
+    output_per_million: 75.00
+    cached_input_per_million: 1.50

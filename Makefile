@@ -1,6 +1,14 @@
 .PHONY: help install test lint format typecheck check clean \
         dev dev-stop dev-reset migrate migrate-create
 
+# Auto-load .env so local secrets (ANTHROPIC_API_KEY, TENAME_TEST_DATABASE_URL,
+# ...) flow through every target without a manual `source .env`. Values
+# already in the shell still win — we don't re-export existing vars.
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 help:
 	@echo "Tename dev targets:"
 	@echo "  make install              - sync dev dependencies with uv"
