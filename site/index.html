@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tename — The production runtime for any agent framework</title>
+  <meta name="description" content="Open-source production runtime for AI agents. Durable sessions, sandbox isolation, per-model optimization. Same agent code runs on Claude, GPT, Gemini, or Llama.">
+  <meta property="og:title" content="Tename — The production runtime for any agent framework">
+  <meta property="og:description" content="Open-source production runtime for AI agents. Durable sessions, sandbox isolation, per-model optimization.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tename.ai">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Tename — The production runtime for any agent framework">
+  <meta name="twitter:description" content="Open-source production runtime for AI agents. Same code runs on Claude, GPT, Gemini, or Llama.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#FBF8F4;--surface:#FFFFFF;--text:#2A1F14;--muted:#7A6E60;--accent:#D4622B;--accent-light:#FDF0E8;--accent-dark:#A8461A;--border:rgba(42,31,20,0.08);--code-bg:#1E1B18;--code-text:#E8E2D8;--sans:'DM Sans',system-ui,-apple-system,sans-serif;--mono:'JetBrains Mono','Fira Code',monospace}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:var(--sans);color:var(--text);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased}
+    .sky-bar-top{background:linear-gradient(180deg,#3D5A80 0%,#5E81AC 15%,#8FAEC9 30%,#C9B896 50%,#E8A85C 70%,#D4622B 85%,#A8461A 100%);height:6px;width:100%}
+    .sky-bar-bottom{background:linear-gradient(180deg,#A8461A 0%,#D4622B 15%,#E8A85C 35%,#C9B896 55%,#8FAEC9 75%,#5E81AC 90%,#3D5A80 100%);height:4px;width:100%}
+    .hero{padding:3.5rem 1.5rem 3rem;text-align:center;max-width:720px;margin:0 auto}
+    .logo-placeholder{width:72px;height:72px;border-radius:16px;background:linear-gradient(135deg,#E8A85C 0%,#D4622B 60%,#A8461A 100%);margin:0 auto 1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(212,98,43,0.2)}
+    .logo-placeholder::after{content:'';width:32px;height:32px;border:3px solid rgba(255,255,255,0.7);border-radius:8px;transform:rotate(12deg)}
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--accent-dark);background:var(--accent-light);padding:5px 16px;border-radius:20px;margin-bottom:1.5rem;letter-spacing:0.02em}
+    .badge-dot{width:6px;height:6px;background:var(--accent);border-radius:50%}
+    h1{font-size:clamp(36px,6vw,52px);font-weight:600;letter-spacing:-0.035em;line-height:1.08;margin-bottom:0.3rem}
+    h1 span{background:linear-gradient(135deg,#D4622B,#E8853E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .subtitle{font-size:clamp(17px,2.5vw,21px);color:var(--muted);font-weight:400;margin-bottom:1.5rem;line-height:1.45}
+    .pitch{font-size:16px;color:var(--muted);max-width:540px;margin:0 auto 2.25rem;line-height:1.7}
+    .cta-row{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:1.25rem}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:8px;font-family:var(--sans);font-size:15px;font-weight:500;text-decoration:none;cursor:pointer;border:none;transition:transform 0.15s ease,box-shadow 0.15s ease}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(212,98,43,0.15)}
+    .btn:active{transform:translateY(0);box-shadow:none}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+    .install-hint{font-size:14px;color:var(--muted)}
+    .install-hint code{font-family:var(--mono);background:var(--surface);border:1px solid var(--border);padding:4px 14px;border-radius:6px;font-size:13px}
+    .code-section{max-width:680px;margin:0 auto 4rem;padding:0 1.5rem}
+    .code-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
+    .code-block{background:var(--code-bg);border-radius:12px;padding:1.5rem 1.75rem;overflow-x:auto}
+    .code-block pre{font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--code-text);white-space:pre}
+    .ck{color:#8B8478}.cs{color:#E8A85C}.cf{color:#D4806B}.cv{color:#C5A67E}.cn{color:#7B9CC4}
+    .code-note{font-size:13px;color:var(--muted);text-align:center;margin-top:12px;font-style:italic}
+    .code-note code{font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--border);padding:1px 8px;border-radius:4px}
+    .features{max-width:780px;margin:0 auto 4rem;padding:0 1.5rem;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .feat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem}
+    .feat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+    .feat h3{font-size:15px;font-weight:600;margin-bottom:5px;letter-spacing:-0.01em}
+    .feat p{font-size:13.5px;color:var(--muted);line-height:1.6}
+    .position{max-width:680px;margin:0 auto 4rem;padding:0 1.5rem;text-align:center}
+    .position-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:2.5rem 2rem}
+    .position h2{font-size:20px;font-weight:600;margin-bottom:8px;letter-spacing:-0.02em}
+    .position p{font-size:14.5px;color:var(--muted);line-height:1.6;max-width:460px;margin:0 auto 1.5rem}
+    .stack{max-width:380px;margin:0 auto}
+    .stack-item{padding:10px 0;font-size:14px;font-weight:500;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .stack-item:last-child{border-bottom:none}
+    .stack-label{color:var(--muted);font-weight:400;font-size:13px}
+    .stack-hl{background:var(--accent-light);color:var(--accent-dark);padding:3px 14px;border-radius:6px;font-weight:600}
+    .bottom-cta{text-align:center;padding:0 1.5rem 2rem;max-width:680px;margin:0 auto}
+    footer{text-align:center;padding:2rem 1.5rem 3rem;border-top:1px solid var(--border);max-width:680px;margin:0 auto}
+    footer p{font-size:13px;color:var(--muted)}
+    footer a{color:var(--accent-dark);text-decoration:none}
+    footer a:hover{text-decoration:underline}
+    .status{margin-top:8px;font-size:12px;color:#A89888}
+    @media(max-width:600px){.hero{padding:2.5rem 1rem 2rem}.features{grid-template-columns:1fr}.code-block{padding:1rem 1.25rem}.code-block pre{font-size:12px}.position-card{padding:2rem 1.25rem}.logo-placeholder{width:60px;height:60px;border-radius:14px}.logo-placeholder::after{width:26px;height:26px}}
+  </style>
+</head>
+<body>
+  <div class="sky-bar-top"></div>
+  <section class="hero">
+    <!-- LOGO: Replace this div with your logo image when ready -->
+    <!-- <img src="logo.svg" alt="Tename" width="72" height="72" style="margin:0 auto 1.5rem;display:block;border-radius:16px;"> -->
+    <div class="logo-placeholder"></div>
+    <div class="badge"><span class="badge-dot"></span> Open source · Apache 2.0</div>
+    <h1><span>Tename</span></h1>
+    <p class="subtitle">The production runtime for any agent framework.</p>
+    <p class="pitch">Durable sessions, sandbox isolation, and per-model optimization — so the same agent code runs well on Claude, GPT, Gemini, or Llama without rewrites.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/YOUR_USERNAME/tename" target="_blank" rel="noopener">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/YOUR_USERNAME/tename/tree/main/docs" target="_blank" rel="noopener">Read the docs</a>
+    </div>
+    <p class="install-hint"><code>pip install tename</code></p>
+  </section>
+  <section class="code-section">
+    <div class="code-label">10 lines to a running agent</div>
+    <div class="code-block"><pre><span class="cf">from</span> <span class="cn">tename</span> <span class="cf">import</span> Tename
+
+client = Tename()
+
+agent = client.agents.create(
+    <span class="cv">model</span>=<span class="cs">"claude-opus-4-6"</span>,
+    <span class="cv">system_prompt</span>=<span class="cs">"You are a research assistant."</span>,
+    <span class="cv">tools</span>=[<span class="cs">"web_search"</span>, <span class="cs">"python"</span>],
+)
+
+session = client.sessions.create(<span class="cv">agent_id</span>=agent.id)
+
+<span class="cf">for</span> event <span class="cf">in</span> session.send(<span class="cs">"Research the EV charging market"</span>):
+    <span class="cf">if</span> event.type == <span class="cs">"assistant_message"</span>:
+        print(event.payload[<span class="cs">"content"</span>], <span class="cv">end</span>=<span class="cs">""</span>)</pre></div>
+    <p class="code-note">Switch to GPT-5? Change <code>model="gpt-5"</code> — one line, same code.</p>
+  </section>
+  <section class="features">
+    <div class="feat">
+      <div class="feat-icon" style="background:#FDF0E8;">
+        <svg width="20" height="20" fill="none" stroke="#A8461A" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <h3>Durable sessions</h3>
+      <p>Append-only event log with idempotent writes. Kill the process mid-run, restart, resume exactly where you left off. Zero lost work.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:#EBF0F7;">
+        <svg width="20" height="20" fill="none" stroke="#4A6FA5" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </div>
+      <h3>Per-model profiles</h3>
+      <p>YAML configs that tune caching, context management, and quirk handling per model. Same harness, different optimization. Community-contributed.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:#F5EDE4;">
+        <svg width="20" height="20" fill="none" stroke="#8B6F4E" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <h3>Sandbox isolation</h3>
+      <p>LLM-generated code runs in Docker containers. Credentials never enter the sandbox — vault + tool proxy keeps secrets structurally separate.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:#FDF5ED;">
+        <svg width="20" height="20" fill="none" stroke="#C5864A" stroke-width="2" viewBox="0 0 24 24"><path d="M16 18l2-2-2-2"/><path d="M8 18l-2-2 2-2"/><path d="M14.5 4h-5l-1 16h7l-1-16z"/></svg>
+      </div>
+      <h3>Framework-agnostic</h3>
+      <p>Tename doesn't replace Deep Agents or LangGraph — it runs beneath them. Bring your existing code, get production infrastructure underneath.</p>
+    </div>
+  </section>
+  <section class="position">
+    <div class="position-card">
+      <h2>Where Tename fits</h2>
+      <p>Tename is the runtime layer. Your framework handles the thinking. Tename handles everything else.</p>
+      <div class="stack">
+        <div class="stack-item"><span>Your product / UI</span><span class="stack-label">what users see</span></div>
+        <div class="stack-item"><span>Deep Agents / LangGraph</span><span class="stack-label">orchestration</span></div>
+        <div class="stack-item"><span class="stack-hl">Tename</span><span class="stack-label">runtime</span></div>
+        <div class="stack-item"><span>Claude / GPT / Gemini / Llama</span><span class="stack-label">models</span></div>
+      </div>
+    </div>
+  </section>
+  <section class="bottom-cta">
+    <a class="btn btn-primary" href="https://github.com/YOUR_USERNAME/tename" target="_blank" rel="noopener">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      Star on GitHub
+    </a>
+  </section>
+  <div class="sky-bar-bottom"></div>
+  <footer>
+    <p>Apache 2.0 · Built in the open · <a href="https://github.com/YOUR_USERNAME/tename">GitHub</a> · <a href="https://github.com/YOUR_USERNAME/tename/tree/main/docs">Docs</a></p>
+    <p class="status">v0.1 in development — star the repo to follow progress</p>
+  </footer>
+</body>
+</html>
