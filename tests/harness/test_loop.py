@@ -206,17 +206,17 @@ async def test_no_system_prompt_means_no_system_event(
     assert not [e for e in events if e.type == EventType.SYSTEM_EVENT]
 
 
-async def test_tool_call_produces_stubbed_tool_result(
+async def test_tool_call_without_sandbox_produces_stub(
     service: SessionService,
     agent_no_prompt: UUID,
 ) -> None:
-    """A tool_call event from the model gets a stub tool_result with is_error=True."""
+    """A sandbox-tool call with no Sandbox wired gets an is_error stub."""
     session = await service.create_session(agent_no_prompt)
     await _seed_user_message(service, session.id, "run something")
 
     router = FakeModelRouter(
         [
-            # Turn 1: model requests a tool call.
+            # Turn 1: model requests a sandbox tool call.
             [
                 tool_call_start(tool_id="call_1", tool_name="python", index=0),
                 tool_call_end(
@@ -239,8 +239,41 @@ async def test_tool_call_produces_stubbed_tool_result(
     assert len(tool_calls) == 1
     assert len(tool_results) == 1
     assert tool_results[0].payload["is_error"] is True
-    assert "not yet implemented" in tool_results[0].payload["error"]
+    assert "no sandbox is configured" in tool_results[0].payload["error"]
+    assert tool_results[0].payload["tool_name"] == "python"
     assert tool_results[0].payload["tool_call_id"] == str(tool_calls[0].id)
+
+
+async def test_non_sandbox_tool_call_gets_proxy_stub(
+    service: SessionService,
+    agent_no_prompt: UUID,
+) -> None:
+    """Non-sandbox tools (future proxy tools) still surface the 'land in S10' stub."""
+    session = await service.create_session(agent_no_prompt)
+    await _seed_user_message(service, session.id, "search")
+
+    router = FakeModelRouter(
+        [
+            [
+                tool_call_start(tool_id="call_1", tool_name="web_search", index=0),
+                tool_call_end(
+                    tool_id="call_1",
+                    tool_name="web_search",
+                    tool_input={"q": "tename"},
+                    index=0,
+                ),
+                done_chunk(),
+            ],
+            [text_delta("ok."), done_chunk()],
+        ]
+    )
+    await _harness(service, router).run_session(session.id)
+
+    events = await service.get_events(session.id)
+    tool_results = [e for e in events if e.type == EventType.TOOL_RESULT]
+    assert len(tool_results) == 1
+    assert tool_results[0].payload["is_error"] is True
+    assert "proxy tools land in S10" in tool_results[0].payload["error"]
 
 
 async def test_max_turns_caps_runaway_agent(

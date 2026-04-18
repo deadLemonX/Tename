@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import ClassVar
 from uuid import UUID, uuid4
@@ -278,11 +279,30 @@ def test_chunk_to_event_returns_none_for_streaming_plumbing(chunk: ModelChunk) -
 # ---- VanillaAdapter.get_tools / supports_streaming -------------------------
 
 
-def test_get_tools_returns_empty_list_in_v0_1() -> None:
-    tools = VanillaAdapter().get_tools(_agent(tools=["bash", "python"]))
+def test_get_tools_empty_when_agent_has_no_tools() -> None:
+    tools = VanillaAdapter().get_tools(_agent(tools=[]))
     assert tools == []
-    # and type is list[ToolDef] in the sense of being iterable of ToolDef
+
+
+def test_get_tools_surfaces_sandbox_builtins() -> None:
+    """Sandbox built-in names in agent.tools → matching ToolDef schemas."""
+    tools = VanillaAdapter().get_tools(_agent(tools=["python", "bash"]))
+    assert [t.name for t in tools] == ["python", "bash"]
     assert all(isinstance(t, ToolDef) for t in tools)
+    python_def = tools[0]
+    assert "code" in python_def.input_schema["properties"]
+
+
+def test_get_tools_dedupes_and_preserves_order() -> None:
+    tools = VanillaAdapter().get_tools(_agent(tools=["python", "bash", "python"]))
+    assert [t.name for t in tools] == ["python", "bash"]
+
+
+def test_get_tools_skips_unknown_names_with_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="tename.harness.adapters.vanilla"):
+        tools = VanillaAdapter().get_tools(_agent(tools=["python", "not_a_tool"]))
+    assert [t.name for t in tools] == ["python"]
+    assert any("not_a_tool" in rec.message for rec in caplog.records)
 
 
 def test_supports_streaming_is_true() -> None:

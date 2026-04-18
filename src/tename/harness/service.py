@@ -1,12 +1,12 @@
 """HarnessRuntime: the stateless brain loop.
 
-S7 fills in the core loop sketched in
-`docs/architecture/harness-runtime.md`: wake the session, load agent +
-profile + adapter, rebuild context from events each iteration, stream a
-model completion, emit incremental events + a final consolidated
-assistant message, stub tool execution (real sandbox routing lands in S9
-/ S10), apply truncate-strategy compaction, and obey profile stop
-conditions before marking the session complete.
+S7 shipped the core loop (wake → per-turn stream → consolidated
+assistant_message → stub tool_results → compaction → mark_complete).
+S9 replaces the tool-call stub: when a `Sandbox` is wired in and the
+tool name is a sandbox built-in (bash / python / file_*), the harness
+lazily provisions a sandbox (emitting a `system_event` recording its
+id), executes the tool, and emits a real `tool_result`. Proxy tools
+(web_search, etc.) still surface an `is_error` stub until S10.
 
 The loop keeps no state across iterations beyond local counters. Every
 conversational fact lives in the Session Service event log. Killing the
@@ -33,6 +33,7 @@ from tename.harness.compaction import (
 )
 from tename.harness.profiles import Profile, ProfileLoader
 from tename.router.types import Message, ToolDef, Usage
+from tename.sandbox import BUILTIN_TOOL_NAMES, Sandbox, SandboxRecipe, SandboxStatus
 from tename.sessions.models import Agent, Event, EventType
 
 if TYPE_CHECKING:
@@ -43,6 +44,14 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_UUID_NAMESPACE = "tename:system-prompt"
 """Namespace string for the deterministic UUID of per-session system-prompt events."""
+
+SANDBOX_PROVISIONED_UUID_NAMESPACE = "tename:sandbox-provisioned"
+"""Namespace for `system_event(type='sandbox_provisioned')` ids. Each
+provision emits a fresh event id so a second provision after an ERROR
+sandbox lands as a new row rather than colliding with the first."""
+
+SYSTEM_EVENT_SANDBOX_PROVISIONED = "sandbox_provisioned"
+"""Payload discriminator for sandbox-provisioned system events."""
 
 
 class HarnessRuntime:
@@ -56,9 +65,9 @@ class HarnessRuntime:
         session_service: The Session Service instance backing event
             durability and sequence assignment.
         model_router: The Model Router used for streaming completions.
-        sandbox: Pluggable sandbox handle for code-execution tools. Real
-            type arrives in S9; typed as `Any` for now so callers can
-            pass `None` in the skeleton.
+        sandbox: Optional `Sandbox` service. When present, sandbox tool
+            calls (bash, python, file_*) route through it; when absent,
+            they surface a stub `is_error` result.
         tool_proxy: Pluggable tool-proxy handle for external-API tools.
             Real type arrives in S10.
         profile_loader: Optional custom loader. Defaults to one that
@@ -69,7 +78,7 @@ class HarnessRuntime:
         self,
         session_service: SessionService,
         model_router: ModelRouter,
-        sandbox: Any | None = None,
+        sandbox: Sandbox | None = None,
         tool_proxy: Any | None = None,
         *,
         profile_loader: ProfileLoader | None = None,
@@ -86,7 +95,8 @@ class HarnessRuntime:
         Terminates when the model produces no tool calls (the standard
         stop), when the turn or duration budget is exhausted, when the
         model returns an error chunk, or when there is no user turn to
-        respond to. Marks the session COMPLETED on exit.
+        respond to. Marks the session COMPLETED on exit. If a sandbox
+        was provisioned for the session, it's destroyed in `finally`.
         """
         session = await self._session_service.wake(session_id)
         agent = await self._session_service.get_agent(session.agent_id)
@@ -108,53 +118,62 @@ class HarnessRuntime:
         started_at = monotonic()
         turn = 0
         stop_reason = "max_turns"
+        provisioned_sandbox_ids: set[str] = set()
 
-        while turn < max_turns:
-            turn += 1
+        try:
+            while turn < max_turns:
+                turn += 1
 
-            if max_duration is not None and monotonic() - started_at > max_duration:
-                stop_reason = "max_duration"
-                break
+                if max_duration is not None and monotonic() - started_at > max_duration:
+                    stop_reason = "max_duration"
+                    break
 
-            events = await self._session_service.get_events(session_id)
-
-            if should_compact(apply_compaction_view(events), profile):
-                await self._emit_compaction(session_id, events, profile)
                 events = await self._session_service.get_events(session_id)
 
-            active = apply_compaction_view(events)
-            messages = adapter.build_context(active, profile)
-            tools = adapter.get_tools(agent)
+                if should_compact(apply_compaction_view(events), profile):
+                    await self._emit_compaction(session_id, events, profile)
+                    events = await self._session_service.get_events(session_id)
 
-            if not any(m.role == "user" for m in messages):
-                logger.info(
-                    "harness.run.no_user_turn",
-                    extra={**log_ctx, "turn": turn},
+                active = apply_compaction_view(events)
+                messages = adapter.build_context(active, profile)
+                tools = adapter.get_tools(agent)
+
+                if not any(m.role == "user" for m in messages):
+                    logger.info(
+                        "harness.run.no_user_turn",
+                        extra={**log_ctx, "turn": turn},
+                    )
+                    stop_reason = "no_user_turn"
+                    break
+
+                turn_result = await self._run_turn(
+                    session_id=session_id,
+                    turn=turn,
+                    profile=profile,
+                    adapter=adapter,
+                    messages=messages,
+                    tools=tools,
                 )
-                stop_reason = "no_user_turn"
-                break
 
-            turn_result = await self._run_turn(
-                session_id=session_id,
-                turn=turn,
-                profile=profile,
-                adapter=adapter,
-                messages=messages,
-                tools=tools,
-            )
+                if turn_result.errored:
+                    stop_reason = "model_error"
+                    break
 
-            if turn_result.errored:
-                stop_reason = "model_error"
-                break
+                if not turn_result.tool_calls:
+                    stop_reason = "no_tool_calls"
+                    break
 
-            if not turn_result.tool_calls:
-                stop_reason = "no_tool_calls"
-                break
-
-            await self._stub_tool_results(session_id, turn_result.tool_calls)
-        else:
-            # Loop exited because `turn == max_turns` without a break.
-            stop_reason = "max_turns"
+                await self._execute_tool_calls(
+                    session_id=session_id,
+                    agent=agent,
+                    tool_calls=turn_result.tool_calls,
+                    provisioned_sandbox_ids=provisioned_sandbox_ids,
+                )
+            else:
+                # Loop exited because `turn == max_turns` without a break.
+                stop_reason = "max_turns"
+        finally:
+            await self._destroy_sandboxes(provisioned_sandbox_ids)
 
         await self._session_service.mark_complete(session_id)
         logger.info(
@@ -253,31 +272,176 @@ class HarnessRuntime:
         )
         return _TurnResult(tool_calls=tool_calls, errored=errored)
 
-    async def _stub_tool_results(
+    async def _execute_tool_calls(
         self,
+        *,
         session_id: UUID,
+        agent: Agent,
         tool_calls: list[PendingEvent],
+        provisioned_sandbox_ids: set[str],
     ) -> None:
-        """Emit placeholder `tool_result` events for each tool call.
+        """Dispatch each tool call to the sandbox or stub its result.
 
-        Real tool execution arrives in S9 (sandbox tools) and S10 (proxy
-        tools). Until then, every tool call produces an `is_error` result
-        so the model sees the failure mode in context.
+        Sandbox built-ins (bash/python/file_*) with a wired `Sandbox`
+        instance run for real; anything else (proxy tools in S10,
+        sandbox tools with no backend configured) emits a stubbed
+        `is_error` result so the model sees the failure mode.
         """
         for call in tool_calls:
-            tool_name = call.payload.get("tool_name")
-            result_id = uuid5(NAMESPACE_URL, f"tename:tool-result:{call.id}")
+            tool_name_raw = call.payload.get("tool_name")
+            tool_name = tool_name_raw if isinstance(tool_name_raw, str) else ""
+            tool_input = call.payload.get("input", {})
+            if not isinstance(tool_input, dict):
+                tool_input = {}
+
+            if tool_name in BUILTIN_TOOL_NAMES and self._sandbox is not None:
+                payload = await self._run_sandbox_tool(
+                    session_id=session_id,
+                    agent=agent,
+                    call=call,
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                    provisioned_sandbox_ids=provisioned_sandbox_ids,
+                )
+            else:
+                payload = _stub_payload(call, tool_name, self._sandbox)
+
             await self._session_service.emit_event(
                 session_id,
-                event_id=result_id,
+                event_id=uuid5(NAMESPACE_URL, f"tename:tool-result:{call.id}"),
                 event_type=EventType.TOOL_RESULT,
-                payload={
-                    "tool_call_id": str(call.id),
-                    "tool_name": tool_name,
-                    "is_error": True,
-                    "error": "tool execution not yet implemented (lands in S9/S10)",
+                payload=payload,
+            )
+
+    async def _run_sandbox_tool(
+        self,
+        *,
+        session_id: UUID,
+        agent: Agent,
+        call: PendingEvent,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        provisioned_sandbox_ids: set[str],
+    ) -> dict[str, Any]:
+        """Lazily provision + execute a sandbox tool; return a tool_result payload."""
+        assert self._sandbox is not None  # for type-checker; caller guards it.
+        try:
+            sandbox_id = await self._get_or_provision_sandbox(
+                session_id=session_id,
+                agent=agent,
+                provisioned_sandbox_ids=provisioned_sandbox_ids,
+            )
+        except Exception as exc:
+            logger.exception(
+                "harness.sandbox.provision_fail",
+                extra={"session_id": str(session_id), "tool": tool_name},
+            )
+            return {
+                "tool_call_id": str(call.id),
+                "tool_name": tool_name,
+                "is_error": True,
+                "error": f"sandbox provisioning failed: {exc}",
+                "content": f"sandbox provisioning failed: {exc}",
+            }
+
+        try:
+            result = await self._sandbox.execute(sandbox_id, tool_name, tool_input)
+        except Exception as exc:
+            logger.exception(
+                "harness.sandbox.execute_fail",
+                extra={
+                    "session_id": str(session_id),
+                    "sandbox_id": sandbox_id,
+                    "tool": tool_name,
                 },
             )
+            return {
+                "tool_call_id": str(call.id),
+                "tool_name": tool_name,
+                "is_error": True,
+                "error": f"sandbox execute failed: {exc}",
+                "content": f"sandbox execute failed: {exc}",
+                "sandbox_id": sandbox_id,
+            }
+
+        return {
+            "tool_call_id": str(call.id),
+            "tool_name": tool_name,
+            "is_error": result.is_error,
+            "content": result.content,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.exit_code,
+            "error": result.error,
+            "sandbox_id": sandbox_id,
+        }
+
+    async def _get_or_provision_sandbox(
+        self,
+        *,
+        session_id: UUID,
+        agent: Agent,
+        provisioned_sandbox_ids: set[str],
+    ) -> str:
+        """Return a live sandbox id for this session, provisioning if needed.
+
+        Reuses an existing `system_event(type='sandbox_provisioned')` when
+        the tracked sandbox is still alive. Provisions fresh (and emits a
+        new system_event) when either no record exists or the previously
+        recorded sandbox is gone/errored (e.g. after a timeout kill).
+        """
+        assert self._sandbox is not None
+        events = await self._session_service.get_events(session_id)
+        existing_id = _latest_sandbox_id(events)
+
+        if existing_id is not None:
+            status = await self._sandbox.status(existing_id)
+            if status in {SandboxStatus.READY, SandboxStatus.IDLE, SandboxStatus.RUNNING}:
+                provisioned_sandbox_ids.add(existing_id)
+                return existing_id
+            logger.info(
+                "harness.sandbox.reprovision",
+                extra={
+                    "session_id": str(session_id),
+                    "stale_sandbox_id": existing_id,
+                    "stale_status": status.value,
+                },
+            )
+
+        recipe = _recipe_from_agent(agent)
+        new_id = await self._sandbox.provision(recipe)
+        provisioned_sandbox_ids.add(new_id)
+
+        # Deterministic id keyed on session + sandbox_id so a replay
+        # after a mid-provision crash collapses into the same row (the
+        # backend will return the same short id on the same container).
+        event_id = uuid5(
+            NAMESPACE_URL,
+            f"{SANDBOX_PROVISIONED_UUID_NAMESPACE}:{session_id}:{new_id}",
+        )
+        await self._session_service.emit_event(
+            session_id,
+            event_id=event_id,
+            event_type=EventType.SYSTEM_EVENT,
+            payload={
+                "type": SYSTEM_EVENT_SANDBOX_PROVISIONED,
+                "sandbox_id": new_id,
+                "runtime": recipe.runtime,
+            },
+        )
+        return new_id
+
+    async def _destroy_sandboxes(self, sandbox_ids: set[str]) -> None:
+        if self._sandbox is None:
+            return
+        for sandbox_id in sandbox_ids:
+            try:
+                await self._sandbox.destroy(sandbox_id)
+            except Exception:
+                logger.exception(
+                    "harness.sandbox.destroy_fail",
+                    extra={"sandbox_id": sandbox_id},
+                )
 
     async def _emit_compaction(
         self,
@@ -326,4 +490,51 @@ class _TurnResult:
         self.errored = errored
 
 
-__all__ = ["SYSTEM_PROMPT_UUID_NAMESPACE", "HarnessRuntime"]
+def _stub_payload(call: PendingEvent, tool_name: str, sandbox: Sandbox | None) -> dict[str, Any]:
+    """Construct the stub tool_result payload for tools the harness can't run.
+
+    Two distinct failure modes, kept distinct so the model sees a useful
+    error string:
+      - sandbox tool requested but no Sandbox was wired in
+      - non-sandbox, non-proxy tool (proxy routing lands in S10)
+    """
+    if tool_name in BUILTIN_TOOL_NAMES and sandbox is None:
+        error = (
+            f"tool '{tool_name}' is a sandbox tool but no sandbox is configured for this runtime"
+        )
+    else:
+        error = f"tool '{tool_name}' execution not yet implemented (proxy tools land in S10)"
+    return {
+        "tool_call_id": str(call.id),
+        "tool_name": tool_name,
+        "is_error": True,
+        "error": error,
+        "content": error,
+    }
+
+
+def _latest_sandbox_id(events: list[Event]) -> str | None:
+    """Pull the most recent sandbox_id from `system_event` records."""
+    for event in reversed(events):
+        if event.type != EventType.SYSTEM_EVENT:
+            continue
+        if event.payload.get("type") != SYSTEM_EVENT_SANDBOX_PROVISIONED:
+            continue
+        sandbox_id = event.payload.get("sandbox_id")
+        if isinstance(sandbox_id, str) and sandbox_id:
+            return sandbox_id
+    return None
+
+
+def _recipe_from_agent(agent: Agent) -> SandboxRecipe:
+    """Build a `SandboxRecipe` from `agent.sandbox_recipe`, defaults otherwise."""
+    raw = agent.sandbox_recipe or {}
+    return SandboxRecipe.model_validate(raw)
+
+
+__all__ = [
+    "SANDBOX_PROVISIONED_UUID_NAMESPACE",
+    "SYSTEM_EVENT_SANDBOX_PROVISIONED",
+    "SYSTEM_PROMPT_UUID_NAMESPACE",
+    "HarnessRuntime",
+]

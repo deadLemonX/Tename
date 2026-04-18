@@ -52,11 +52,18 @@ from tename.harness.profiles import (
     StopConditions,
     ToolFormat,
 )
-from tename.harness.service import SYSTEM_PROMPT_UUID_NAMESPACE, HarnessRuntime
+from tename.harness.service import (
+    SANDBOX_PROVISIONED_UUID_NAMESPACE,
+    SYSTEM_EVENT_SANDBOX_PROVISIONED,
+    SYSTEM_PROMPT_UUID_NAMESPACE,
+    HarnessRuntime,
+)
 
 __all__ = [
     "BUILTIN_TOOLS",
     "BUNDLED_PROFILES_PACKAGE",
+    "SANDBOX_PROVISIONED_UUID_NAMESPACE",
+    "SYSTEM_EVENT_SANDBOX_PROVISIONED",
     "SYSTEM_PROMPT_UUID_NAMESPACE",
     "CompactionDecision",
     "CompactionStrategy",

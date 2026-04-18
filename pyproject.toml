@@ -31,6 +31,7 @@ dependencies = [
     "anthropic>=0.40.0",
     "litellm>=1.50.0",
     "pyyaml>=6.0",
+    "docker>=7.1.0",
 ]
 
 [project.optional-dependencies]
@@ -119,6 +120,7 @@ asyncio_mode = "auto"
 markers = [
     "postgres: integration test that requires live Postgres via TENAME_TEST_DATABASE_URL",
     "anthropic: integration test that requires live Anthropic API via ANTHROPIC_API_KEY",
+    "sandbox: integration test that requires a running Docker daemon",
 ]
 filterwarnings = [
     "error",

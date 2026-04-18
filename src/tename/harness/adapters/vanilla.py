@@ -14,13 +14,17 @@ the adapter itself never needs the `Agent` handle (keeping it stateless).
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from uuid import uuid4
 
 from tename.harness.adapters.base import FrameworkAdapter, PendingEvent, register_adapter
 from tename.harness.profiles import Profile
 from tename.router.types import ContentBlock, Message, ModelChunk, ToolDef
+from tename.sandbox import BUILTIN_TOOL_SCHEMAS
 from tename.sessions.models import Agent, Event, EventType
+
+logger = logging.getLogger(__name__)
 
 
 class VanillaAdapter(FrameworkAdapter):
@@ -67,14 +71,29 @@ class VanillaAdapter(FrameworkAdapter):
         return None
 
     def get_tools(self, agent: Agent) -> list[ToolDef]:
-        """Return tool definitions in generic JSON-schema shape.
+        """Return tool definitions for the sandbox built-ins this agent asked for.
 
-        Vanilla agents carry only tool names in `agent.tools`; concrete
-        tool schemas are resolved by the sandbox (S9) and tool proxy
-        (S10). Until those modules ship, this returns an empty list so
-        the skeleton stays honest.
+        `agent.tools` is a list of tool names; known sandbox built-ins
+        (bash, python, file_*) surface their `ToolDef` schema here so
+        the model router can forward them to the provider. Unknown
+        names are dropped with a warning (proxy tools land in S10).
+        Duplicate names dedupe while preserving first-seen order.
         """
-        return []
+        out: list[ToolDef] = []
+        seen: set[str] = set()
+        for name in agent.tools:
+            if name in seen:
+                continue
+            seen.add(name)
+            tool = BUILTIN_TOOL_SCHEMAS.get(name)
+            if tool is None:
+                logger.warning(
+                    "vanilla: unknown tool '%s' — skipping (proxy tools arrive with S10)",
+                    name,
+                )
+                continue
+            out.append(tool)
+        return out
 
     def supports_streaming(self) -> bool:
         return True
