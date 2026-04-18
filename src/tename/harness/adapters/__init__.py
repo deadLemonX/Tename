@@ -17,9 +17,12 @@ from tename.harness.adapters.base import (
     known_adapters,
     register_adapter,
 )
+from tename.harness.adapters.deep_agents import BUILTIN_TOOLS, DeepAgentsAdapter
 from tename.harness.adapters.vanilla import VanillaAdapter
 
 __all__ = [
+    "BUILTIN_TOOLS",
+    "DeepAgentsAdapter",
     "FrameworkAdapter",
     "PendingEvent",
     "UnknownAdapterError",

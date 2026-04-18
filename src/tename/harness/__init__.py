@@ -21,6 +21,8 @@ when stop conditions fire. See `docs/architecture/harness-runtime.md`.
 """
 
 from tename.harness.adapters import (
+    BUILTIN_TOOLS,
+    DeepAgentsAdapter,
     FrameworkAdapter,
     PendingEvent,
     UnknownAdapterError,
@@ -53,11 +55,13 @@ from tename.harness.profiles import (
 from tename.harness.service import SYSTEM_PROMPT_UUID_NAMESPACE, HarnessRuntime
 
 __all__ = [
+    "BUILTIN_TOOLS",
     "BUNDLED_PROFILES_PACKAGE",
     "SYSTEM_PROMPT_UUID_NAMESPACE",
     "CompactionDecision",
     "CompactionStrategy",
     "ContextConfig",
+    "DeepAgentsAdapter",
     "FrameworkAdapter",
     "HarnessRuntime",
     "PendingEvent",

@@ -84,8 +84,8 @@ def test_get_adapter_returns_fresh_instance_each_call() -> None:
 
 
 def test_unknown_adapter_raises() -> None:
-    with pytest.raises(UnknownAdapterError, match="deep_agents"):
-        get_adapter("deep_agents")
+    with pytest.raises(UnknownAdapterError, match="nonexistent_framework"):
+        get_adapter("nonexistent_framework")
 
 
 def test_reregister_same_class_is_noop() -> None:
