@@ -101,3 +101,8 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
