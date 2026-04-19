@@ -125,8 +125,8 @@ The vault itself has a passphrase. Store that passphrase the same way you'd stor
 3. Back up the database
 4. Stop the process that holds the `Tename` client
 5. Upgrade the package: `pip install --upgrade tename`
-6. Run migrations: `make migrate` (or `uv run alembic upgrade head`
-   from a repo checkout)
+6. Run migrations: `tename migrate` (uses `TENAME_DATABASE_URL`).
+   From a repo checkout, `make migrate` does the same thing.
 7. Restart the process
 8. Verify by running your own smoke test
    (`examples/01-hello-world/main.py` is a good starting point)

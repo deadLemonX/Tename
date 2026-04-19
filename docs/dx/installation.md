@@ -29,27 +29,39 @@ This installs the `tename` library and the `tename` CLI entrypoint.
 
 ## Start Postgres
 
-Tename stores all durable session state in Postgres. The easiest path
-is the bundled docker-compose config — clone the repo and run:
+Tename stores all durable session state in Postgres. Two paths:
+
+**Pip-only (no repo checkout required):**
+
+```bash
+docker run -d --name tename-postgres \
+  -e POSTGRES_USER=tename -e POSTGRES_PASSWORD=tename \
+  -e POSTGRES_DB=tename_dev -p 5433:5432 \
+  postgres:16-alpine
+
+export TENAME_DATABASE_URL='postgresql+psycopg://tename:tename@localhost:5433/tename_dev'
+tename migrate     # applies the wheel-bundled schema
+```
+
+`tename migrate` runs alembic against whatever `TENAME_DATABASE_URL`
+points at, using migrations bundled inside the `tename` wheel. Pass
+`--database-url` to override the env var for a single invocation, or
+`--revision <rev>` to target a specific migration (default: `head`).
+
+**Repo checkout (easier for contributors):**
 
 ```bash
 git clone https://github.com/deadLemonX/Tename
 cd Tename
-make dev           # docker compose up postgres
-make migrate       # apply alembic schema
+make dev           # docker compose up postgres (localhost:5433)
+make migrate       # alembic upgrade head against TENAME_DATABASE_URL
 ```
 
-Alternatively, point Tename at an existing Postgres by setting
-`TENAME_DATABASE_URL` before starting the client:
+Or against an existing managed Postgres:
 
 ```bash
-export TENAME_DATABASE_URL="postgresql+psycopg://user:pass@host:5432/dbname"
-```
-
-Apply the schema from a checkout of the repo:
-
-```bash
-uv run alembic upgrade head
+export TENAME_DATABASE_URL='postgresql+psycopg://user:pass@host:5432/dbname'
+tename migrate
 ```
 
 ## Set your Anthropic key
@@ -104,19 +116,22 @@ Every env var can be overridden by an explicit keyword argument to
 
 ### CLI
 
-The shipped CLI covers the vault only in v0.1:
+The shipped CLI covers two areas in v0.1:
 
 ```bash
 tename --version
+
 tename vault set <name>        # prompts for the value
 tename vault list
 tename vault get <name>        # hidden from --help; for scripting
 tename vault remove <name>
+
+tename migrate                 # alembic upgrade head against TENAME_DATABASE_URL
+tename migrate --database-url postgresql+psycopg://...
+tename migrate --revision <rev>
 ```
 
-More CLI surface (`tename doctor`, `tename migrate`, etc.) is not in
-v0.1. Until those ship, use `make migrate` / `uv run alembic upgrade
-head` from a repo checkout.
+More CLI surface (`tename doctor`, `tename dev`, etc.) is not in v0.1.
 
 ## Troubleshooting
 

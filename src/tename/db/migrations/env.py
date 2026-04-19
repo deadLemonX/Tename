@@ -26,9 +26,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.getenv("TENAME_DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# Prefer a URL already set on the config (e.g. `tename migrate` builds
+# a Config programmatically and sets sqlalchemy.url explicitly). Only
+# fall back to the env var when the config doesn't have one — this
+# matches the repo's alembic.ini which ships with an empty
+# sqlalchemy.url.
+if not config.get_main_option("sqlalchemy.url"):
+    database_url = os.getenv("TENAME_DATABASE_URL")
+    if database_url:
+        config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = metadata
 

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-04-19
+
+Point release. Closes the "I `pip install`ed, now what?" gap.
+
+### Added
+
+- **`tename migrate` CLI subcommand.** Runs alembic against
+  `TENAME_DATABASE_URL` (or `--database-url`) using the migrations
+  bundled inside the installed wheel. Pip-only users no longer need
+  to clone the repo just to apply the schema. `--revision` selects
+  a specific migration (default: `head`). See
+  [`src/tename/cli/migrate_commands.py`](src/tename/cli/migrate_commands.py).
+- `alembic>=1.13` promoted from dev-only to runtime dependency so the
+  new CLI works from a plain `pip install tename`.
+
+### Changed
+
+- `src/tename/db/migrations/env.py` now prefers an already-set
+  `sqlalchemy.url` on the alembic `Config` over the
+  `TENAME_DATABASE_URL` env var. Pre-existing repo-checkout flow
+  (`make migrate` + `alembic.ini` with empty url) is unaffected —
+  env.py still fills the url from the env var when the config
+  doesn't specify one. The new `tename migrate` CLI sets the url
+  explicitly on the Config, so env.py leaves it alone.
+- README + `docs/QUICKSTART.md` + `docs/dx/installation.md` +
+  `docs/dx/cli-design.md` + `docs/operations/deployment.md` updated
+  to document the pip-only install-and-migrate path.
+
+### Migration notes
+
+No database schema changes. Users on 0.1.0 can upgrade with
+`pip install --upgrade tename`; no re-migration required.
+
+[0.1.1]: https://github.com/deadLemonX/Tename/releases/tag/v0.1.1
+
 ## [0.1.0] — 2026-04-19
 
 The initial public release. Tename is an open-source, model-agnostic

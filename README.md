@@ -124,20 +124,41 @@ summarization compaction, OpenTelemetry tracing, TypeScript SDK.
 pip install tename
 ```
 
-### Spin up Postgres and apply the schema
+### Point it at Postgres and apply the schema
+
+You need a running Postgres. Either use a managed one or spin one up
+with Docker:
 
 ```bash
-git clone https://github.com/deadLemonX/Tename
-cd Tename
-make dev         # docker compose up postgres
-make migrate     # apply schema
+docker run -d --name tename-postgres \
+  -e POSTGRES_USER=tename -e POSTGRES_PASSWORD=tename \
+  -e POSTGRES_DB=tename_dev -p 5433:5432 \
+  postgres:16-alpine
+
+export TENAME_DATABASE_URL='postgresql+psycopg://tename:tename@localhost:5433/tename_dev'
+tename migrate     # applies the wheel-bundled schema
 ```
+
+If you prefer cloning the repo: `git clone ...; make dev; make migrate`
+does all three steps at once.
 
 ### Run the hello-world
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-python examples/01-hello-world/main.py
+python -c "
+from tename import Tename
+with Tename(enable_sandbox=False) as client:
+    agent = client.agents.create(
+        name='hi',
+        model='claude-opus-4-6',
+        system_prompt='You are a concise assistant.',
+    )
+    session = client.sessions.create(agent_id=agent.id)
+    for ev in session.send('Tell me one interesting fact about octopuses.'):
+        if ev.type == 'assistant_message' and ev.payload.get('is_complete'):
+            print(ev.payload['content'])
+"
 ```
 
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for the full 10-minute

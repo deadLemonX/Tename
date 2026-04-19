@@ -1847,9 +1847,10 @@ asyncio = [
 
 [[package]]
 name = "tename"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "alembic" },
     { name = "anthropic" },
     { name = "cryptography" },
     { name = "docker" },
@@ -1863,7 +1864,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "alembic" },
     { name = "pre-commit" },
     { name = "pyright" },
     { name = "pytest" },
@@ -1874,7 +1874,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.13.0" },
+    { name = "alembic", specifier = ">=1.13.0" },
     { name = "anthropic", specifier = ">=0.40.0" },
     { name = "cryptography", specifier = ">=43.0.0" },
     { name = "docker", specifier = ">=7.1.0" },

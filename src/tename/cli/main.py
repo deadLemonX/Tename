@@ -14,6 +14,7 @@ import sys
 from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 
+from tename.cli.migrate_commands import add_migrate_subparser
 from tename.cli.vault_commands import add_vault_subparser
 
 
@@ -26,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
     add_vault_subparser(subparsers)
+    add_migrate_subparser(subparsers)
 
     return parser
 

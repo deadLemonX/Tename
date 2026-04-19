@@ -13,7 +13,58 @@ Get a Tename agent talking to Claude Opus 4.6 in under 10 minutes.
 If any of those fail, fix them first — Tename's container and sandbox
 layer need them all.
 
-## 1. Clone and install
+## Two paths
+
+Pick whichever fits your situation:
+
+- **Pip-only path** — add Tename to an existing project. You bring
+  Postgres, `tename migrate` applies the schema. Skip to "Pip-only
+  path" below.
+- **Repo path** — clone the repo to get docker-compose + Makefile +
+  the examples. Continue reading.
+
+## Pip-only path
+
+```bash
+pip install tename
+
+# Spin up Postgres however you like. Example using the official image:
+docker run -d --name tename-postgres \
+  -e POSTGRES_USER=tename -e POSTGRES_PASSWORD=tename \
+  -e POSTGRES_DB=tename_dev -p 5433:5432 \
+  postgres:16-alpine
+
+export TENAME_DATABASE_URL='postgresql+psycopg://tename:tename@localhost:5433/tename_dev'
+export ANTHROPIC_API_KEY='sk-ant-...'
+
+# Apply the wheel-bundled schema:
+tename migrate
+
+# Run a one-liner agent:
+python -c "
+from tename import Tename
+with Tename(enable_sandbox=False) as client:
+    agent = client.agents.create(
+        name='hi', model='claude-opus-4-6',
+        system_prompt='You are a concise assistant.',
+    )
+    session = client.sessions.create(agent_id=agent.id)
+    for ev in session.send('Tell me one fact about octopuses.'):
+        if ev.type == 'assistant_message' and ev.payload.get('is_complete'):
+            print(ev.payload['content'])
+"
+```
+
+That's the full "pip install to running agent" flow. For the sandbox
+path (running Python/bash inside Docker), leave `enable_sandbox=True`
+(the default) and make sure Docker is running.
+
+## Repo path
+
+The rest of this doc walks through the repo-checkout flow — it's the
+path that gives you `make dev`, the examples, and the tests.
+
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/deadLemonX/Tename
@@ -33,7 +84,7 @@ Or with pip:
 pip install -e ".[dev]"
 ```
 
-## 2. Start the local Postgres
+### 2. Start the local Postgres
 
 Tename stores session state in Postgres (16+). The repo ships a
 `docker-compose.yml` that brings one up in under ten seconds:
@@ -51,7 +102,7 @@ make migrate
 
 You should see alembic print `Running upgrade -> 0001_initial_schema`.
 
-## 3. Set your Anthropic key
+### 3. Set your Anthropic key
 
 Either export it in your shell:
 
@@ -62,7 +113,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 Or copy `.env.example` to `.env` in the repo root and fill it in — the
 Makefile and pytest auto-load `.env`.
 
-## 4. Run the hello-world example
+### 4. Run the hello-world example
 
 ```bash
 python examples/01-hello-world/main.py
@@ -79,7 +130,7 @@ and one pumps it through the rest of their body.
 
 If you see streamed output like that, Tename is working end-to-end.
 
-## 5. Next: the coding agent
+### 5. Next: the coding agent
 
 The coding agent writes Python, runs it in a Docker sandbox, and reports
 the result:
@@ -91,7 +142,7 @@ python examples/03-coding-agent/main.py
 First run pulls `python:3.12-slim` (~125 MB) — subsequent runs reuse
 the cached image.
 
-## 6. Next: the research agent (optional)
+### 6. Next: the research agent (optional)
 
 Example 02 adds Deep Agents planning plus a live web search tool. It
 requires a [Tavily](https://tavily.com/) API key (they offer a free

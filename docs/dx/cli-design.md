@@ -19,7 +19,9 @@ SDK. The CLI exists for operations that don't require writing Python.
 tename --version       # print the installed version
 tename --help          # top-level help
 tename vault --help    # vault sub-help
+tename migrate --help  # migrate sub-help
 
+# --- Vault ---
 tename vault set <name>                      # prompts for the value
 tename vault set <name> --vault-path <path>  # override vault file
 tename vault list
@@ -27,10 +29,21 @@ tename vault list --vault-path <path>
 tename vault remove <name>
 tename vault remove <name> --yes             # skip confirmation
 tename vault get <name>                      # hidden from --help; for scripting
+
+# --- Migrate (added in 0.1.1) ---
+tename migrate                               # alembic upgrade head
+tename migrate --database-url <sqlalchemy-url>
+tename migrate --revision <rev>              # default: head
 ```
 
 Global flags on every `vault` subcommand: `--vault-path <path>`
 (defaults to `~/.tename/vault.json.enc`).
+
+`tename migrate` reads `TENAME_DATABASE_URL` by default and runs
+alembic against the migrations bundled inside the installed wheel —
+no repo checkout required. See the
+[migration runtime](../architecture/session-service.md) for what
+actually changes.
 
 The vault's passphrase comes from `$TENAME_VAULT_PASSPHRASE` by
 default. `tename vault list` does not need a passphrase — credential
@@ -47,7 +60,6 @@ users beyond what they already have.
 | Not shipped | Do this instead |
 |---|---|
 | `tename dev` | `make dev` (starts Postgres via docker compose) |
-| `tename migrate` | `make migrate` or `uv run alembic upgrade head` |
 | `tename agents create/list/show/delete` | `client.agents.*` via the SDK |
 | `tename sessions run/list/show/replay/delete` | `client.sessions.*` via the SDK |
 | `tename profiles list/show/validate` | `ProfileLoader.load(...)` via the SDK |
@@ -65,6 +77,8 @@ count justifies it.
 Source: `src/tename/cli/`:
 - `main.py` — entry point (`build_parser()`, `main(argv=None) -> int`)
 - `vault_commands.py` — `cmd_set`, `cmd_list`, `cmd_remove`, `cmd_get`
+- `migrate_commands.py` — `cmd_migrate`, `build_alembic_config`,
+  `bundled_migrations_path`
 - `__main__.py` — `python -m tename.cli` dispatch
 
 Installed via `[project.scripts] tename = "tename.cli.main:main"` in
