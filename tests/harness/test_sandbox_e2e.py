@@ -88,8 +88,7 @@ async def test_real_e2e_factorial(
         event_type=EventType.USER_MESSAGE,
         payload={
             "content": (
-                "Use the python tool to compute the factorial of 10. "
-                "Print the numeric result."
+                "Use the python tool to compute the factorial of 10. Print the numeric result."
             )
         },
     )

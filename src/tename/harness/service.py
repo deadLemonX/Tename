@@ -2,11 +2,12 @@
 
 S7 shipped the core loop (wake → per-turn stream → consolidated
 assistant_message → stub tool_results → compaction → mark_complete).
-S9 replaces the tool-call stub: when a `Sandbox` is wired in and the
-tool name is a sandbox built-in (bash / python / file_*), the harness
-lazily provisions a sandbox (emitting a `system_event` recording its
-id), executes the tool, and emits a real `tool_result`. Proxy tools
-(web_search, etc.) still surface an `is_error` stub until S10.
+S9 replaced the sandbox tool stub: sandbox built-ins route through a
+`Sandbox` when one is wired. S10 wires the last gap — proxy tools now
+route through a `ToolProxy`, which injects credentials from the vault
+and runs the tool outside the sandbox. Each `tool_result` payload has
+the same base shape whether sandbox-backed or proxy-backed, so
+adapters don't need to branch on execution path.
 
 The loop keeps no state across iterations beyond local counters. Every
 conversational fact lives in the Session Service event log. Killing the
@@ -32,6 +33,7 @@ from tename.harness.compaction import (
     should_compact,
 )
 from tename.harness.profiles import Profile, ProfileLoader
+from tename.proxy import ToolProxy, proxy_tool_names
 from tename.router.types import Message, ToolDef, Usage
 from tename.sandbox import BUILTIN_TOOL_NAMES, Sandbox, SandboxRecipe, SandboxStatus
 from tename.sessions.models import Agent, Event, EventType
@@ -68,8 +70,10 @@ class HarnessRuntime:
         sandbox: Optional `Sandbox` service. When present, sandbox tool
             calls (bash, python, file_*) route through it; when absent,
             they surface a stub `is_error` result.
-        tool_proxy: Pluggable tool-proxy handle for external-API tools.
-            Real type arrives in S10.
+        tool_proxy: Optional `ToolProxy`. When present, tool calls that
+            name a registered proxy tool (e.g. `web_search`) execute
+            via the proxy with credentials pulled from the vault. When
+            absent, proxy tool calls surface a stub `is_error` result.
         profile_loader: Optional custom loader. Defaults to one that
             reads the bundled `tename.profiles` package.
     """
@@ -79,7 +83,7 @@ class HarnessRuntime:
         session_service: SessionService,
         model_router: ModelRouter,
         sandbox: Sandbox | None = None,
-        tool_proxy: Any | None = None,
+        tool_proxy: ToolProxy | None = None,
         *,
         profile_loader: ProfileLoader | None = None,
     ) -> None:
@@ -303,8 +307,15 @@ class HarnessRuntime:
                     tool_input=tool_input,
                     provisioned_sandbox_ids=provisioned_sandbox_ids,
                 )
+            elif tool_name in proxy_tool_names() and self._tool_proxy is not None:
+                payload = await self._run_proxy_tool(
+                    session_id=session_id,
+                    call=call,
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                )
             else:
-                payload = _stub_payload(call, tool_name, self._sandbox)
+                payload = _stub_payload(call, tool_name, self._sandbox, self._tool_proxy)
 
             await self._session_service.emit_event(
                 session_id,
@@ -374,6 +385,31 @@ class HarnessRuntime:
             "exit_code": result.exit_code,
             "error": result.error,
             "sandbox_id": sandbox_id,
+        }
+
+    async def _run_proxy_tool(
+        self,
+        *,
+        session_id: UUID,
+        call: PendingEvent,
+        tool_name: str,
+        tool_input: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Execute a proxy tool and shape its result into a tool_result payload.
+
+        All failure modes (unknown tool, missing credential, tool
+        exception) surface as `is_error=True` — the ToolProxy itself
+        never raises out to the harness. Credentials don't appear in
+        the payload; see `proxy.service.ToolProxy.execute`.
+        """
+        assert self._tool_proxy is not None
+        result = await self._tool_proxy.execute(tool_name, tool_input, session_id)
+        return {
+            "tool_call_id": str(call.id),
+            "tool_name": tool_name,
+            "is_error": result.is_error,
+            "content": result.content,
+            "error": result.error,
         }
 
     async def _get_or_provision_sandbox(
@@ -490,20 +526,30 @@ class _TurnResult:
         self.errored = errored
 
 
-def _stub_payload(call: PendingEvent, tool_name: str, sandbox: Sandbox | None) -> dict[str, Any]:
+def _stub_payload(
+    call: PendingEvent,
+    tool_name: str,
+    sandbox: Sandbox | None,
+    tool_proxy: ToolProxy | None,
+) -> dict[str, Any]:
     """Construct the stub tool_result payload for tools the harness can't run.
 
-    Two distinct failure modes, kept distinct so the model sees a useful
-    error string:
+    Three distinct failure modes, kept distinct so the model sees a
+    useful error string:
       - sandbox tool requested but no Sandbox was wired in
-      - non-sandbox, non-proxy tool (proxy routing lands in S10)
+      - proxy tool requested but no ToolProxy was wired in
+      - unknown tool — neither a sandbox built-in nor a registered proxy tool
     """
     if tool_name in BUILTIN_TOOL_NAMES and sandbox is None:
         error = (
             f"tool '{tool_name}' is a sandbox tool but no sandbox is configured for this runtime"
         )
+    elif tool_name in proxy_tool_names() and tool_proxy is None:
+        error = (
+            f"tool '{tool_name}' is a proxy tool but no tool proxy is configured for this runtime"
+        )
     else:
-        error = f"tool '{tool_name}' execution not yet implemented (proxy tools land in S10)"
+        error = f"tool '{tool_name}' is not a registered sandbox or proxy tool"
     return {
         "tool_call_id": str(call.id),
         "tool_name": tool_name,

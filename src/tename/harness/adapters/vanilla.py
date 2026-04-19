@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from tename.harness.adapters.base import FrameworkAdapter, PendingEvent, register_adapter
 from tename.harness.profiles import Profile
+from tename.proxy import proxy_tool_schemas
 from tename.router.types import ContentBlock, Message, ModelChunk, ToolDef
 from tename.sandbox import BUILTIN_TOOL_SCHEMAS
 from tename.sessions.models import Agent, Event, EventType
@@ -71,24 +72,27 @@ class VanillaAdapter(FrameworkAdapter):
         return None
 
     def get_tools(self, agent: Agent) -> list[ToolDef]:
-        """Return tool definitions for the sandbox built-ins this agent asked for.
+        """Return tool definitions for the tools this agent asked for.
 
-        `agent.tools` is a list of tool names; known sandbox built-ins
-        (bash, python, file_*) surface their `ToolDef` schema here so
+        `agent.tools` is a list of tool names. Sandbox built-ins
+        (bash, python, file_*) and registered proxy tools (e.g.
+        `web_search`) both surface their `ToolDef` schemas here so
         the model router can forward them to the provider. Unknown
-        names are dropped with a warning (proxy tools land in S10).
-        Duplicate names dedupe while preserving first-seen order.
+        names are dropped with a warning. Duplicate names dedupe
+        while preserving first-seen order. Sandbox built-ins take
+        precedence if a name somehow appears in both registries.
         """
+        proxy_schemas = proxy_tool_schemas()
         out: list[ToolDef] = []
         seen: set[str] = set()
         for name in agent.tools:
             if name in seen:
                 continue
             seen.add(name)
-            tool = BUILTIN_TOOL_SCHEMAS.get(name)
+            tool = BUILTIN_TOOL_SCHEMAS.get(name) or proxy_schemas.get(name)
             if tool is None:
                 logger.warning(
-                    "vanilla: unknown tool '%s' — skipping (proxy tools arrive with S10)",
+                    "vanilla: unknown tool '%s' — skipping (not a sandbox or proxy tool)",
                     name,
                 )
                 continue

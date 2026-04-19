@@ -273,7 +273,8 @@ async def test_non_sandbox_tool_call_gets_proxy_stub(
     tool_results = [e for e in events if e.type == EventType.TOOL_RESULT]
     assert len(tool_results) == 1
     assert tool_results[0].payload["is_error"] is True
-    assert "proxy tools land in S10" in tool_results[0].payload["error"]
+    # No tool_proxy wired → proxy tools surface the no-proxy-configured stub.
+    assert "no tool proxy is configured" in tool_results[0].payload["error"]
 
 
 async def test_max_turns_caps_runaway_agent(

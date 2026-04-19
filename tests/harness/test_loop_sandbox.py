@@ -203,7 +203,9 @@ async def test_unknown_tool_still_stubs_when_sandbox_wired(
     tool_results = [e for e in events if e.type == EventType.TOOL_RESULT]
     assert len(tool_results) == 1
     assert tool_results[0].payload["is_error"] is True
-    assert "proxy tools land in S10" in tool_results[0].payload["error"]
+    # With a sandbox wired but no tool_proxy wired, the known proxy
+    # tool `web_search` surfaces the no-proxy-configured stub.
+    assert "no tool proxy is configured" in tool_results[0].payload["error"]
 
     # No sandbox was provisioned since no sandbox tool ran.
     provisioned = [
