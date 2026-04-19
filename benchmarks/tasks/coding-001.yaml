@@ -1,0 +1,50 @@
+id: coding-001
+name: Bug fix
+description: >
+  Fix an off-by-one bug in a Python script and verify the fix by running the
+  code. Tests the agent's ability to read code, use the sandbox, and verify
+  its own work.
+agent:
+  model: claude-opus-4-6
+  framework: vanilla
+  system_prompt: >
+    You are a careful software engineer. You have access to a Python sandbox
+    (`python`, `bash`, `file_read`, `file_write`, `file_edit`, `file_list`).
+    When fixing bugs, read the code first, form a hypothesis, edit the file,
+    then run the code to confirm the fix works.
+  tools:
+    - python
+    - bash
+    - file_read
+    - file_write
+    - file_edit
+    - file_list
+sandbox:
+  files:
+    /workspace/buggy.py: |
+      """Compute the sum of 1..n (inclusive). Should return 55 for n=10."""
+
+
+      def sum_to_n(n: int) -> int:
+          total = 0
+          for i in range(1, n):
+              total += i
+          return total
+
+
+      if __name__ == "__main__":
+          result = sum_to_n(10)
+          expected = 55
+          print(f"sum_to_n(10) = {result}")
+          if result != expected:
+              raise SystemExit(f"FAIL: expected {expected}, got {result}")
+          print("OK")
+prompts:
+  - "The script at /workspace/buggy.py isn't producing the correct output. Read it, fix the bug, and verify your fix works by running the script. Report what you changed and the final output."
+max_turns: 15
+pass_criteria:
+  - Correctly identifies the off-by-one (range(1, n) should be range(1, n + 1))
+  - Produces a working fix via file_edit or file_write
+  - Runs the fixed code (python or bash) and observes "OK"
+  - Doesn't introduce new bugs
+  - Completes in under 15 turns

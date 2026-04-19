@@ -19,10 +19,7 @@ def _args(tmp_path: Path, **extra: Any) -> argparse.Namespace:
     return argparse.Namespace(**base)
 
 
-def test_cmd_set_stores_credential(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_set_stores_credential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     stdout = io.StringIO()
     args = _args(tmp_path, name="api_key")
@@ -37,10 +34,7 @@ def test_cmd_set_stores_credential(
     assert "api_key" in list_out.getvalue()
 
 
-def test_cmd_set_empty_value_rejected(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_set_empty_value_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     stdout = io.StringIO()
     rc = cmd_set(_args(tmp_path, name="api_key"), prompt_fn=lambda _l: "", stdout=stdout)
@@ -54,10 +48,7 @@ def test_cmd_list_empty(tmp_path: Path) -> None:
     assert "no credentials stored" in stdout.getvalue()
 
 
-def test_cmd_remove_with_yes_flag(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_remove_with_yes_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     cmd_set(
         _args(tmp_path, name="k"),
@@ -71,10 +62,7 @@ def test_cmd_remove_with_yes_flag(
     assert "removed credential 'k'" in stdout.getvalue()
 
 
-def test_cmd_remove_declined(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_remove_declined(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     cmd_set(
         _args(tmp_path, name="k"),
@@ -98,18 +86,14 @@ def test_cmd_remove_declined(
 
 
 def test_cmd_remove_missing_returns_nonzero(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     rc = cmd_remove(_args(tmp_path, name="absent", yes=True), stdout=io.StringIO())
     assert rc == 1
 
 
-def test_cmd_get_roundtrip(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cmd_get_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     cmd_set(_args(tmp_path, name="k"), prompt_fn=lambda _l: "val", stdout=io.StringIO())
 
@@ -140,9 +124,7 @@ def test_main_help_when_no_subcommand() -> None:
 
 
 def test_main_vault_list_end_to_end(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("TENAME_VAULT_PASSPHRASE", "pw")
     vault_file = tmp_path / "v.enc"

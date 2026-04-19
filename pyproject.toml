@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tename"
-version = "0.0.0"
+version = "0.1.0"
 description = "Open-source, model-agnostic production runtime for AI agents. Durable sessions, sandbox isolation, and per-model YAML profiles."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,9 +12,20 @@ license = { file = "LICENSE" }
 authors = [
     { name = "deadLemonX", email = "mjrivera0613@gmail.com" },
 ]
-keywords = ["ai", "agents", "llm", "runtime", "sandbox", "anthropic", "openai"]
+keywords = [
+    "ai",
+    "agents",
+    "llm",
+    "runtime",
+    "sandbox",
+    "anthropic",
+    "claude",
+    "openai",
+    "deep-agents",
+    "infrastructure",
+]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
@@ -22,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
 dependencies = [

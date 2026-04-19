@@ -1,0 +1,58 @@
+id: data-001
+name: Basic CSV analysis
+description: >
+  Analyze a small CSV of regional sales data and extract the top three trends.
+  Tests the agent's ability to read files, write analysis code, and interpret
+  results rather than just reporting numbers.
+agent:
+  model: claude-opus-4-6
+  framework: vanilla
+  system_prompt: >
+    You are a data analyst. You have access to a Python sandbox with pandas
+    pre-installed. When analyzing data, write code to load and explore it,
+    then interpret findings in clear business terms.
+  tools:
+    - python
+    - bash
+    - file_read
+    - file_write
+    - file_edit
+    - file_list
+sandbox:
+  packages:
+    - pandas
+  files:
+    /workspace/sales.csv: |
+      date,region,product,units,revenue_usd
+      2025-01-05,North,Widget,120,3600
+      2025-01-06,North,Gadget,45,2250
+      2025-01-07,South,Widget,80,2400
+      2025-01-08,South,Gadget,30,1500
+      2025-01-09,East,Widget,200,6000
+      2025-01-10,East,Gadget,95,4750
+      2025-01-11,West,Widget,60,1800
+      2025-01-12,West,Gadget,20,1000
+      2025-02-05,North,Widget,140,4200
+      2025-02-06,North,Gadget,55,2750
+      2025-02-07,South,Widget,70,2100
+      2025-02-08,South,Gadget,25,1250
+      2025-02-09,East,Widget,240,7200
+      2025-02-10,East,Gadget,130,6500
+      2025-02-11,West,Widget,50,1500
+      2025-02-12,West,Gadget,18,900
+      2025-03-05,North,Widget,165,4950
+      2025-03-06,North,Gadget,70,3500
+      2025-03-07,South,Widget,65,1950
+      2025-03-08,South,Gadget,22,1100
+      2025-03-09,East,Widget,290,8700
+      2025-03-10,East,Gadget,180,9000
+      2025-03-11,West,Widget,45,1350
+      2025-03-12,West,Gadget,15,750
+prompts:
+  - "Analyze the sales data at /workspace/sales.csv. What are the top three trends worth highlighting? Use the sandbox to load and explore the data, then explain each trend in business terms."
+max_turns: 12
+pass_criteria:
+  - Uses pandas (or similar) to load and inspect the CSV
+  - Identifies at least 3 trends supported by the data (e.g., East region growth, Gadget margin profile, West decline, monthly seasonality)
+  - Explains each trend in business terms, not just numbers
+  - Completes in under 12 turns

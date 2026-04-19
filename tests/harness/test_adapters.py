@@ -41,9 +41,14 @@ def profile() -> Profile:
     return ProfileLoader().load("claude-opus-4-6")
 
 
-def _event(event_type: EventType, payload: dict[str, object], sequence: int = 1) -> Event:
+def _event(
+    event_type: EventType,
+    payload: dict[str, object],
+    sequence: int = 1,
+    event_id: UUID | None = None,
+) -> Event:
     return Event(
-        id=uuid4(),
+        id=event_id if event_id is not None else uuid4(),
         session_id=UUID(int=1),
         sequence=sequence,
         type=event_type,
@@ -150,7 +155,13 @@ def test_build_context_user_and_assistant_messages(profile: Profile) -> None:
 
     assert [m.role for m in messages] == ["user", "assistant", "user"]
     assert messages[0].content == "hello"
-    assert messages[1].content == "hi there"
+    # Assistant turns surface as a single text block so tool rounds can
+    # append tool_use blocks alongside the text in the same message.
+    assistant_content = messages[1].content
+    assert isinstance(assistant_content, list)
+    assert len(assistant_content) == 1
+    assert assistant_content[0].type == "text"
+    assert assistant_content[0].text == "hi there"
     assert messages[2].content == "what's 2+2?"
 
 
@@ -196,29 +207,97 @@ def test_build_context_skips_incomplete_assistant_deltas(profile: Profile) -> No
 
     messages = adapter.build_context(events, profile)
     assert [m.role for m in messages] == ["user", "assistant"]
-    assert messages[1].content == "answer"
+    assistant_content = messages[1].content
+    assert isinstance(assistant_content, list)
+    assert assistant_content[0].type == "text"
+    assert assistant_content[0].text == "answer"
 
 
-def test_build_context_skips_tool_and_harness_events(profile: Profile) -> None:
+def test_build_context_carries_tool_rounds_through(profile: Profile) -> None:
+    """A turn with text + tool_call folds into one assistant message with
+    both blocks; the tool_result event lands as a tool-role message with
+    a matching `tool_use_id`. This is what makes multi-turn tool use
+    actually work against Anthropic (see v0.1 bug fix — any preamble text
+    before a tool_use used to leave the conversation ending on an
+    assistant turn and the next request would be rejected)."""
+    tool_call_event_id = uuid4()
     events = [
-        _event(EventType.USER_MESSAGE, {"content": "hi"}, sequence=1),
+        _event(EventType.USER_MESSAGE, {"content": "check file"}, sequence=1),
         _event(
             EventType.TOOL_CALL,
-            {"tool_id": "t1", "tool_name": "bash", "input": {}},
+            {"tool_id": "toolu_123", "tool_name": "file_read", "input": {"path": "/f"}},
             sequence=2,
+            event_id=tool_call_event_id,
+        ),
+        _event(
+            EventType.ASSISTANT_MESSAGE,
+            {"content": "I'll read the file.", "is_complete": True},
+            sequence=3,
         ),
         _event(
             EventType.TOOL_RESULT,
-            {"call_id": "t1", "result": "ok"},
-            sequence=3,
+            {
+                "tool_call_id": str(tool_call_event_id),
+                "tool_name": "file_read",
+                "is_error": False,
+                "content": "file contents",
+            },
+            sequence=4,
         ),
-        _event(EventType.HARNESS_EVENT, {"kind": "plan"}, sequence=4),
+        _event(EventType.USER_MESSAGE, {"content": "thanks"}, sequence=5),
+    ]
+    adapter = VanillaAdapter()
+
+    messages = adapter.build_context(events, profile)
+
+    assert [m.role for m in messages] == ["user", "assistant", "tool", "user"]
+
+    assistant = messages[1].content
+    assert isinstance(assistant, list)
+    assert [b.type for b in assistant] == ["text", "tool_use"]
+    assert assistant[0].text == "I'll read the file."
+    assert assistant[1].id == "toolu_123"
+    assert assistant[1].name == "file_read"
+
+    tool_msg = messages[2].content
+    assert isinstance(tool_msg, list)
+    assert tool_msg[0].type == "tool_result"
+    assert tool_msg[0].tool_use_id == "toolu_123"
+    assert tool_msg[0].content == "file contents"
+
+
+def test_build_context_skips_harness_events(profile: Profile) -> None:
+    events = [
+        _event(EventType.USER_MESSAGE, {"content": "hi"}, sequence=1),
+        _event(EventType.HARNESS_EVENT, {"kind": "plan"}, sequence=2),
     ]
     adapter = VanillaAdapter()
 
     messages = adapter.build_context(events, profile)
     assert len(messages) == 1
     assert messages[0].role == "user"
+
+
+def test_build_context_skips_orphan_tool_result(profile: Profile) -> None:
+    """A tool_result whose matching tool_call is absent must be skipped
+    or Anthropic will reject the request for a dangling `tool_use_id`."""
+    events = [
+        _event(EventType.USER_MESSAGE, {"content": "hi"}, sequence=1),
+        _event(
+            EventType.TOOL_RESULT,
+            {
+                "tool_call_id": str(uuid4()),
+                "tool_name": "bash",
+                "is_error": False,
+                "content": "ok",
+            },
+            sequence=2,
+        ),
+    ]
+    adapter = VanillaAdapter()
+
+    messages = adapter.build_context(events, profile)
+    assert [m.role for m in messages] == ["user"]
 
 
 # ---- VanillaAdapter.chunk_to_event -----------------------------------------

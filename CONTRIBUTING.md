@@ -83,13 +83,34 @@ suite. See `docs/harness/profile-format.md` for the schema and
 ### New framework adapters
 
 Implement the `FrameworkAdapter` interface in a new module under
-`src/tename/harness/adapters/`. Concept mapping notes for the first adapter
-(Deep Agents) will land in `docs/harness/` when S8 is complete — use those as
-a template for your adapter.
+`src/tename/harness/adapters/`. See
+[`docs/harness/adapter-deep-agents.md`](docs/harness/adapter-deep-agents.md)
+for the concept-mapping pattern used by the Deep Agents adapter — start
+from that template. Auto-register at import time via `register_adapter`
+so users just need to `import` your module.
 
 ### New benchmark tasks
 
-Add a YAML task to `benchmarks/tasks/`. See `docs/harness/benchmark-suite.md`.
+Add a YAML task under `benchmarks/tasks/<task-id>.yaml`. See
+[`docs/harness/benchmark-suite.md`](docs/harness/benchmark-suite.md) for
+the full schema and
+[`benchmarks/graders/manual.md`](benchmarks/graders/manual.md) for the
+grading rubric.
+
+A good task:
+
+- Tests a capability real users actually need (not synthetic toys).
+- Has pass criteria specific enough that different graders agree on
+  the outcome.
+- Completes in under 10 minutes of wall time.
+- Does not rely on external services that may disappear (use a seeded
+  sandbox file instead of a live URL where possible).
+- Has a known expected answer (or a small set of acceptable ones) so
+  grading is defensible.
+
+Run your task against at least one profile with
+`python benchmarks/run.py --task <id> --profile claude-opus-4-6` and
+include the results JSON in your PR.
 
 ### Bug reports and feature requests
 

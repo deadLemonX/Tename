@@ -1,0 +1,23 @@
+id: research-001
+name: Market sizing
+description: >
+  Research and estimate the global market size for EV charging infrastructure
+  in 2028. Tests the agent's ability to gather evidence, reason under
+  uncertainty, and structure a clear quantified answer.
+agent:
+  model: claude-opus-4-6
+  framework: vanilla
+  system_prompt: >
+    You are a research analyst. When answering questions that require market
+    sizing or forecasting, reason step by step, state key assumptions, and
+    arrive at a quantified range. Cite distinct data points you used in your
+    reasoning.
+  tools: []
+prompts:
+  - "Estimate the global market size for EV charging infrastructure in 2028. Provide a range with key assumptions."
+max_turns: 10
+pass_criteria:
+  - Arrives at a quantified estimate with a range (not just "big")
+  - Cites at least 3 distinct data points
+  - Acknowledges key assumptions
+  - Completes in under 10 turns

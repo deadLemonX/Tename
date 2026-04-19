@@ -1,0 +1,23 @@
+id: integration-001
+name: Multi-turn context retention
+description: >
+  Four-turn conversation that requires the agent to recall context from turn 1
+  when answering turn 4. Tests session durability and context management.
+agent:
+  model: claude-opus-4-6
+  framework: vanilla
+  system_prompt: >
+    You are a helpful research assistant. Remember details the user shares
+    across the conversation and refer back to them when it's relevant.
+  tools: []
+prompts:
+  - "My name is Alex and I'm researching renewable energy."
+  - "What are the main types?"
+  - "Focus on solar."
+  - "Given what I originally said I was researching, what solar companies should I look at?"
+max_turns_per_prompt: 1
+pass_criteria:
+  - Turn 4 answer recalls the "renewable energy" research context Alex set in turn 1
+  - Gives relevant solar company recommendations (not a generic list of companies)
+  - Agent does not ask the user to remind it of earlier context
+  - Completes in 4 user turns (one per prompt)

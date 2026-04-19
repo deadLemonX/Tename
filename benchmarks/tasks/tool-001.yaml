@@ -1,0 +1,32 @@
+id: tool-001
+name: Tool selection
+description: >
+  Given a real-time factual question, the agent should pick web_search over
+  python (no computation or scraping). Tests that the agent doesn't
+  over-engineer when a simple lookup is sufficient.
+agent:
+  model: claude-opus-4-6
+  framework: vanilla
+  system_prompt: >
+    You are a helpful assistant with access to web_search, python, file_read,
+    and bash. Pick the simplest tool that can answer the user's question.
+  tools:
+    - web_search
+    - python
+    - file_read
+    - bash
+prompts:
+  - "What's the current price of Apple stock?"
+max_turns: 3
+pass_criteria:
+  - First tool call is web_search (NOT python or bash)
+  - Does not attempt to scrape or compute the answer locally
+  - Returns a price with a date / timestamp (if web_search credential is configured; otherwise grades the tool choice only)
+  - Completes in 1 to 3 turns
+notes: >
+  Grading this task against a live Anthropic model does NOT require a working
+  web_search credential — the pass criterion that matters is tool selection.
+  If the Tavily key isn't set in the vault, web_search will return a
+  credential-missing error and the model may give up without a price. The
+  grader should score "tool selection" as pass if the first tool call was
+  web_search, independent of whether the call succeeded.

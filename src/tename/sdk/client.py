@@ -158,9 +158,7 @@ class AsyncTename:
             tool_proxy=self._tool_proxy,
             profile_loader=self._profile_loader,
         )
-        self.sessions = AsyncSessionsClient(
-            service=self._session_service, harness=self._harness
-        )
+        self.sessions = AsyncSessionsClient(service=self._session_service, harness=self._harness)
 
 
 class AsyncAgentsClient:

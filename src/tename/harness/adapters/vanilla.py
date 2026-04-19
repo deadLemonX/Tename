@@ -10,13 +10,23 @@ System prompts live in the event log as a `system_event` with
 `payload.type == "system_prompt"`. The S7 harness loop emits that event
 once at session start; this adapter picks it up during `build_context` so
 the adapter itself never needs the `Agent` handle (keeping it stateless).
+
+Tool rounds: `build_context` folds the harness's emit order
+`(text deltas → tool_call → closer → tool_result)` back into Anthropic's
+canonical ordering `(assistant[text + tool_use] → tool[tool_result] →
+assistant[...])`. Without this, any turn where the model emits preamble
+text before a tool_use would leave the context ending on an assistant
+message, and the next request would be rejected with "conversation must
+end with a user message." The logic mirrors `DeepAgentsAdapter` since
+the underlying wire format is identical.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
 
 from tename.harness.adapters.base import FrameworkAdapter, PendingEvent, register_adapter
 from tename.harness.profiles import Profile
@@ -34,11 +44,121 @@ class VanillaAdapter(FrameworkAdapter):
     name = "vanilla"
 
     def build_context(self, events: Sequence[Event], profile: Profile) -> list[Message]:
+        """Fold the event log into an Anthropic-shaped message list.
+
+        Assistant text from the is_complete=True closer combines with that
+        turn's `tool_call` events into ONE `Message(role="assistant",
+        content=[text_block, tool_use_block, ...])`. Runs of subsequent
+        `tool_result` events collapse into one `Message(role="tool",
+        content=[tool_result_block, ...])`. System prompts and user
+        messages pass through as plain text messages.
+
+        Incremental `assistant_message(is_complete=False)` events are
+        skipped — they're ephemeral streaming deltas, already superseded
+        by the closer.
+        """
+        tool_call_ids: dict[UUID, str] = {}
+        for ev in events:
+            if ev.type == EventType.TOOL_CALL:
+                tool_id = ev.payload.get("tool_id")
+                if isinstance(tool_id, str):
+                    tool_call_ids[ev.id] = tool_id
+
         messages: list[Message] = []
-        for event in events:
-            message = self._event_to_message(event)
-            if message is not None:
-                messages.append(message)
+        pending_text: str = ""
+        pending_tool_uses: list[ContentBlock] = []
+        pending_tool_results: list[ContentBlock] = []
+
+        def _flush_assistant() -> None:
+            nonlocal pending_text, pending_tool_uses
+            if not pending_text and not pending_tool_uses:
+                return
+            blocks: list[ContentBlock] = []
+            if pending_text:
+                blocks.append(ContentBlock(type="text", text=pending_text))
+            blocks.extend(pending_tool_uses)
+            messages.append(Message(role="assistant", content=blocks))
+            pending_text = ""
+            pending_tool_uses = []
+
+        def _flush_tool_results() -> None:
+            nonlocal pending_tool_results
+            if not pending_tool_results:
+                return
+            messages.append(Message(role="tool", content=pending_tool_results))
+            pending_tool_results = []
+
+        for ev in events:
+            etype = ev.type
+            payload = ev.payload
+
+            if etype == EventType.SYSTEM_EVENT and payload.get("type") == "system_prompt":
+                _flush_assistant()
+                _flush_tool_results()
+                content = payload.get("content", "")
+                if isinstance(content, str) and content:
+                    messages.append(Message(role="system", content=content))
+                continue
+
+            if etype == EventType.USER_MESSAGE:
+                _flush_assistant()
+                _flush_tool_results()
+                content = payload.get("content", "")
+                if isinstance(content, str):
+                    messages.append(Message(role="user", content=content))
+                continue
+
+            if etype == EventType.ASSISTANT_MESSAGE:
+                if not payload.get("is_complete", False):
+                    continue
+                _flush_tool_results()
+                text = payload.get("content", "")
+                if isinstance(text, str):
+                    pending_text = text
+                continue
+
+            if etype == EventType.TOOL_CALL:
+                tool_id = payload.get("tool_id")
+                tool_name = payload.get("tool_name")
+                tool_input = payload.get("input", {})
+                if not (isinstance(tool_id, str) and isinstance(tool_name, str)):
+                    continue
+                if pending_tool_results:
+                    _flush_assistant()
+                    _flush_tool_results()
+                pending_tool_uses.append(
+                    ContentBlock(
+                        type="tool_use",
+                        id=tool_id,
+                        name=tool_name,
+                        input=tool_input if isinstance(tool_input, dict) else {},
+                    )
+                )
+                continue
+
+            if etype == EventType.TOOL_RESULT:
+                _flush_assistant()
+                tool_call_id = payload.get("tool_call_id")
+                tool_use_id: str | None = None
+                if isinstance(tool_call_id, str):
+                    try:
+                        tool_use_id = tool_call_ids.get(UUID(tool_call_id))
+                    except ValueError:
+                        tool_use_id = None
+                if tool_use_id is None:
+                    logger.debug(
+                        "vanilla: skipping orphaned tool_result",
+                        extra={"event_id": str(ev.id), "tool_call_id": tool_call_id},
+                    )
+                    continue
+                pending_tool_results.append(_tool_result_block(tool_use_id, payload))
+                continue
+
+            # harness_event, error: informational, do not enter context.
+            continue
+
+        _flush_assistant()
+        _flush_tool_results()
         return messages
 
     def chunk_to_event(self, chunk: ModelChunk) -> PendingEvent | None:
@@ -67,8 +187,6 @@ class VanillaAdapter(FrameworkAdapter):
                 type=EventType.ERROR,
                 payload=dict(chunk.content),
             )
-        # done, usage, tool_call_start, tool_call_delta: no event on their
-        # own; the S7 loop handles usage aggregation separately.
         return None
 
     def get_tools(self, agent: Agent) -> list[ToolDef]:
@@ -102,47 +220,25 @@ class VanillaAdapter(FrameworkAdapter):
     def supports_streaming(self) -> bool:
         return True
 
-    @staticmethod
-    def _event_to_message(event: Event) -> Message | None:
-        payload = event.payload
-        if event.type == EventType.USER_MESSAGE:
-            content = payload.get("content", "")
-            return Message(role="user", content=_as_message_content(content))
-        if event.type == EventType.ASSISTANT_MESSAGE:
-            # Only surface completed assistant turns. Incremental deltas
-            # (is_complete=False) accumulate client-side; replaying them
-            # into context would produce duplicate output.
-            if not payload.get("is_complete", False):
-                return None
-            content = payload.get("content", "")
-            return Message(role="assistant", content=_as_message_content(content))
-        if event.type == EventType.SYSTEM_EVENT and payload.get("type") == "system_prompt":
-            content = payload.get("content", "")
-            return Message(role="system", content=_as_message_content(content))
-        # tool_call / tool_result / harness_event / error don't map to
-        # plain chat messages in the vanilla adapter; frameworks that
-        # need them should subclass.
-        return None
 
+def _tool_result_block(tool_use_id: str, payload: dict[str, Any]) -> ContentBlock:
+    """Build an Anthropic-shaped tool_result ContentBlock from a stored event.
 
-def _as_message_content(value: object) -> str | list[ContentBlock]:
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        blocks: list[ContentBlock] = []
-        for entry in value:  # pyright: ignore[reportUnknownVariableType]
-            if isinstance(entry, ContentBlock):
-                blocks.append(entry)
-            elif isinstance(entry, dict):
-                blocks.append(ContentBlock.model_validate(entry))
-            else:
-                raise TypeError(
-                    f"vanilla adapter: cannot interpret content entry of type "
-                    f"{type(entry).__name__}"
-                )
-        return blocks
-    raise TypeError(
-        f"vanilla adapter: message content must be str or list, got {type(value).__name__}"
+    Prefers `payload.content` when present; falls back to `payload.error`
+    for stubbed errors, then to a generic string representation.
+    """
+    content = payload.get("content")
+    if content is None:
+        error = payload.get("error")
+        content = error if isinstance(error, str) else ""
+    if not isinstance(content, str | list):
+        content = str(content)
+    is_error = payload.get("is_error")
+    return ContentBlock(
+        type="tool_result",
+        tool_use_id=tool_use_id,
+        content=content,
+        is_error=bool(is_error) if is_error is not None else None,
     )
 
 
