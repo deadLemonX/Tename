@@ -9,7 +9,9 @@ Profiles are YAML files in the `profiles/` directory. They encode all model-spec
 
 # --- Model identity ---
 model:
-  provider: anthropic  # anthropic, openai, google, openai_compatible
+  provider: anthropic  # v0.1 only implements `anthropic`; future values
+                       # (openai, openai_compatible, google) land when the
+                       # matching provider module ships
   model_id: claude-opus-4-6  # The provider's model identifier
   display_name: "Claude Opus 4.6"  # For logs and UI
   description: "Anthropic's flagship model, tuned for agentic tasks."
@@ -94,16 +96,20 @@ pricing:
 
 Enforced at profile load time. Invalid profiles raise errors; they don't silently work.
 
-1. `model.provider` must be one of: anthropic, openai, google, openai_compatible
+1. `model.provider` is declared as a known string; v0.1's ProfileLoader
+   only wires `anthropic` to a real provider. Setting another value
+   parses successfully but the model router raises at runtime until
+   the matching provider ships.
 2. `context.effective_budget` must be ≤ `context.max_tokens`
 3. `context.compaction_threshold` must be < `context.effective_budget`
-4. `context.compaction_strategy` must be one of: truncate, summarize, file_offload
-   - v0.1 only supports truncate; others raise NotImplementedError
-5. Every `quirks[].review_date` must be after `quirks[].added` date
-6. Every `quirks[].mitigation` must reference a function that exists in the harness
-7. `tool_format` must be one of the supported formats
-8. `sampling.temperature` must be between 0 and 2
-9. `sampling.top_p` must be between 0 and 1
+4. `context.compaction_strategy` must be one of: truncate, summarize,
+   file_offload. v0.1 only supports `truncate`; the other values are
+   rejected at load time with a clear error until the matching
+   implementation lands.
+5. Every `quirks[].review_date` must be after `quirks[].added` date.
+6. `tool_format` must be one of the supported formats.
+7. `sampling.temperature` must be between 0 and 2.
+8. `sampling.top_p` must be between 0 and 1.
 
 ## The quirks field
 
@@ -172,15 +178,22 @@ This lets users create workload-specific variants without copying the whole prof
 
 ## Where profiles live
 
-**Built-in profiles** ship with Tename in the repo's `profiles/` directory:
+**Built-in profiles** ship inside the wheel at
+`src/tename/profiles/`. v0.1 bundles exactly one:
+
 - `claude-opus-4-6.yaml`
+
+Planned additions (one YAML each; the runtime does not change):
+
 - `claude-sonnet-4-6.yaml` (v0.2)
 - `claude-haiku-4-5.yaml` (v0.2)
-- `gpt-5.yaml` (v0.2)
+- `gpt-5.yaml` (v0.2 — paired with the OpenAI provider)
 - `gemini-3-pro.yaml` (v0.3)
 - `llama-4-405b.yaml` (v0.3)
 
-**User profiles** can live anywhere on disk. Users point Tename at their custom profiles via `Tename_PROFILES_DIR` env var or explicit configuration.
+**User profiles** can live anywhere on disk. Users point Tename at
+their custom profiles via the `TENAME_PROFILES_DIR` env var or by
+passing `profiles_dir=...` to `Tename(...)`.
 
 ## Contributing a profile
 

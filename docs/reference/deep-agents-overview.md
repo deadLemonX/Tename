@@ -64,7 +64,7 @@ A user using Deep Agents + Tename writes essentially normal Deep Agents code:
 
 ```python
 from deepagents import create_deep_agent
-from tename_sdk import Tename
+from tename import Tename
 
 # Normal Deep Agents agent setup
 agent_impl = create_deep_agent(

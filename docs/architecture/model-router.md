@@ -6,7 +6,13 @@ Abstracts model provider APIs. Takes a profile and request, routes to the correc
 
 ## Design
 
-Thin layer built on LiteLLM for basic provider routing, with our own code for per-provider features LiteLLM doesn't handle (Anthropic cache breakpoints, Gemini explicit cache API).
+A `ProviderInterface` abstract base class with one `complete(profile,
+messages, tools) -> AsyncIterator[ModelChunk]` contract. Each
+provider module implements the ABC and owns its own SDK lifecycle
+plus provider-specific quirks (Anthropic cache breakpoints, Gemini
+explicit cache API once we add it). `litellm` is in the dependency
+tree for later use but the v0.1 path calls the Anthropic SDK
+directly.
 
 ## API
 
@@ -22,14 +28,16 @@ class ModelRouter:
 
 ## Supported providers in v0.1
 
-- **Anthropic** (direct API via `anthropic` Python SDK)
-- **OpenAI** (direct API via `openai` Python SDK)
-- **OpenAI-compatible endpoints** (for self-hosted models, local Ollama, etc.)
+- **Anthropic** (direct API via `anthropic` Python SDK).
 
-Added in v0.2:
+v0.1 ships the Anthropic provider only. Adding a new provider = a new
+file under `src/tename/router/providers/` implementing the ABC plus
+pricing entries under `pricing.yaml`. Planned for v0.2+:
+
+- OpenAI (direct API)
+- OpenAI-compatible endpoints (Ollama, vLLM, LM Studio, self-hosted)
 - Google (Gemini)
-- Anthropic via Bedrock
-- Anthropic via Vertex AI
+- Anthropic via Bedrock / Vertex AI
 
 ## Streaming chunk types
 
@@ -57,26 +65,39 @@ class ModelChunk:
 
 ## Per-provider handling
 
-### Anthropic
+### Anthropic (v0.1)
 
-- Uses `anthropic` Python SDK
-- Places `cache_control` markers where the profile specifies
-- Captures usage from final message (input_tokens, output_tokens, cached_tokens)
-- Handles Anthropic-specific tool use format
+- Uses `anthropic.AsyncAnthropic` with `client.messages.stream(...)`
+- Places `cache_control` markers where the profile's caching config
+  specifies (v0.1 supports `explicit_breakpoints` with an `after:
+  system_prompt` hook; `after: compaction_summary` is a no-op until
+  adapters emit compaction-summary messages)
+- Captures usage from `message_delta` events (input, output, cached,
+  reasoning tokens)
+- Translates our `Message` / `ContentBlock` / `ToolDef` to Anthropic's
+  wire format: system messages extract to the top-level `system`
+  param; tool-role messages fold back into user messages with
+  `tool_result` blocks
+- Temperature and `top_p` are mutually exclusive per Opus 4.6's API
+  constraint — the provider forwards `temperature` by default and
+  switches to `top_p` (dropping `temperature`) only when the profile
+  narrows `top_p < 1.0`
+- Retries wrap manager `__aenter__` only. Once any chunk has been
+  yielded, mid-stream failures terminate with an `error` chunk — no
+  retry, since already-yielded chunks can't be replayed
 
-### OpenAI
+### Planned: OpenAI / OpenAI-compatible / Gemini / Bedrock
 
-- Uses `openai` Python SDK
-- No explicit caching (OpenAI caches prefixes automatically)
-- Captures usage from `usage` field
-- Handles OpenAI function calling format
+Not shipped in v0.1. Each follows the same pattern:
 
-### OpenAI-compatible endpoints
-
-- Same as OpenAI but with custom `base_url`
-- Used for Ollama, vLLM, LM Studio, etc.
-- Caching depends on backend (some support prefix caching, others don't)
-- Profile can disable caching if unsupported
+1. A `providers/<name>.py` implementing the ABC.
+2. Any provider-specific adapter for tool format (OpenAI function
+   calling, Gemini tool specs, etc.).
+3. Caching strategy per provider (OpenAI caches prefixes
+   automatically; Gemini has an explicit cache API; OpenAI-compatible
+   endpoints vary — the profile's `caching.provider_strategy` picks
+   the right one).
+4. Pricing entries in `pricing.yaml`.
 
 ## Usage tracking
 
@@ -95,7 +116,10 @@ Usage is emitted as a chunk at the end of the stream. The SDK can display it.
 
 ## Pricing
 
-Provider pricing lives in `pricing.yaml`:
+Provider pricing lives in `src/tename/router/pricing.yaml`, bundled
+in the wheel and read via `importlib.resources`. v0.1 only has
+`anthropic.claude-opus-4-6` populated; additional entries arrive as
+new providers/profiles do:
 
 ```yaml
 anthropic:
@@ -103,37 +127,40 @@ anthropic:
     input_per_million: 15.00
     output_per_million: 75.00
     cached_input_per_million: 1.50  # 10% of uncached
-  claude-sonnet-4-6:
-    input_per_million: 3.00
-    output_per_million: 15.00
-    cached_input_per_million: 0.30
-
-openai:
-  gpt-5:
-    input_per_million: 20.00  # Hypothetical
-    output_per_million: 80.00
 ```
 
-Users can override pricing by providing their own `pricing.yaml`.
+A profile can override pricing via its own `pricing` block; the
+bundled table is only a fallback. Unknown model/provider combinations
+return `cost_usd = None` rather than crashing.
 
 ## Retries and error handling
 
 v0.1 keeps this simple:
-- Retry transient errors (5xx, network errors) 3 times with exponential backoff
-- Do NOT retry on 4xx (bad request, auth error, quota exceeded)
-- On final failure, yield `error` chunk and end stream
+- Retry startup errors (5xx, network, timeout) up to
+  `error_handling.max_retries` times with exponential backoff
+  (`backoff_base_seconds * multiplier^attempt`)
+- Do NOT retry on 4xx (bad request, auth error, quota exceeded) —
+  yield a non-retryable `error` chunk immediately
+- **Retries wrap `manager.__aenter__` only.** Once any chunk has been
+  yielded, a mid-stream failure terminates with an `error` chunk and
+  no retry; replaying already-yielded chunks would double-emit events
 - Harness records the error as an event
 
 v0.2 may add:
-- Fallback chains (try Claude Opus, fall back to Sonnet, fall back to GPT)
+- Fallback chains (try Opus, fall back to Sonnet, fall back to GPT)
 - Provider-specific retry strategies
 - Circuit breakers
 
-## Testing requirements
+## Testing
 
-- Unit tests with mocked provider responses
-- Integration test against real Anthropic API (gated behind env var)
-- Integration test against real OpenAI API (gated behind env var)
-- Streaming test: verify chunks arrive in correct order
-- Error handling test: provider returns 500, verify retry behavior
-- Usage capture test: verify tokens are reported correctly
+Shipped coverage:
+
+- Unit tests with mocked provider responses via stand-in
+  `FakeAnthropic` / `FakeMessages` fixtures
+  (`tests/router/conftest.py`)
+- Streaming order tests, tool_use translation, usage capture
+- Retry tests: 500-then-success, 400-no-retry, retries-exhausted,
+  mid-stream error
+- Integration test against real Anthropic API
+  (`tests/router/test_anthropic_integration.py`, gated by
+  `ANTHROPIC_API_KEY` + the `anthropic` pytest marker)

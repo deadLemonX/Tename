@@ -67,25 +67,39 @@ If operators want native metrics, that's a v0.2+ addition.
 The most powerful debugging tool is the session log itself. Every action the agent took, every model response, every tool call - it's all there in order.
 
 ```python
-from tename_sdk import Tename
+import asyncio
+from uuid import UUID
 
-client = Tename()
-events = client.sessions.get_events(session_id="...")
+from tename.sessions import EventType, SessionService
 
-for event in events:
-    print(f"[{event.sequence}] {event.type}")
-    if event.type == "assistant_message":
-        print(f"  Content: {event.payload['content'][:100]}...")
-    elif event.type == "tool_call":
-        print(f"  Tool: {event.payload['tool_name']}")
-        print(f"  Input: {event.payload['input']}")
-    elif event.type == "tool_result":
-        print(f"  Success: {event.payload['success']}")
-        if not event.payload['success']:
-            print(f"  Error: {event.payload['error']}")
+
+async def replay(database_url: str, session_id: UUID) -> None:
+    service = SessionService(database_url)
+    try:
+        events = await service.get_events(session_id)
+        for e in events:
+            print(f"[{e.sequence}] {e.type.value}")
+            if e.type == EventType.ASSISTANT_MESSAGE and e.payload.get("is_complete"):
+                print(f"  content: {e.payload.get('content', '')[:100]}...")
+            elif e.type == EventType.TOOL_CALL:
+                print(f"  tool: {e.payload.get('tool_name')}")
+                print(f"  input: {e.payload.get('input')}")
+            elif e.type == EventType.TOOL_RESULT:
+                is_err = e.payload.get("is_error", False)
+                print(f"  is_error: {is_err}")
+                if is_err:
+                    print(f"  error: {e.payload.get('error')}")
+    finally:
+        await service.close()
+
+
+asyncio.run(replay("postgresql+psycopg://...", UUID("...")))
 ```
 
-The CLI has a `tename sessions replay <id>` command that formats this nicely.
+A dedicated `tename sessions replay` CLI command is planned for v0.2;
+in v0.1 the SessionService read path is the primary replay tool.
+The `examples/deep_agents_research/main.py` script shows a similar
+pretty-printer pattern.
 
 ## What's not in v0.1
 

@@ -67,7 +67,9 @@ That's essentially the whole thing. Everything else is delegation to components.
 
 ## Framework adapters
 
-The core loop is framework-agnostic. Adapters translate between specific agent frameworks (Deep Agents, Claude Agent SDK) and Tename primitives.
+The core loop is framework-agnostic. Adapters translate between
+specific agent frameworks (Deep Agents, plus planned future adapters
+like the Claude Agent SDK) and Tename primitives.
 
 ### Adapter interface
 
@@ -92,18 +94,28 @@ class FrameworkAdapter(ABC):
 
 ### v0.1 adapters
 
-**Deep Agents adapter** (primary, ships first):
-- Maps Deep Agents messages ↔ Tename events
-- Maps `write_todos` calls ↔ `harness_event` with type=plan
-- Maps subagent spawns ↔ child sessions
-- Maps virtual filesystem ↔ sandbox filesystem
+**Deep Agents adapter** (`framework: deep_agents`):
+- Folds the event log into Anthropic-canonical message shape
+  (assistant message carries text + tool_use blocks together;
+  tool_result events become tool-role messages with matching
+  `tool_use_id`)
+- Surfaces the Deep Agents built-in tool schemas (`write_todos`,
+  `ls`, `read_file`, `write_file`, `edit_file`, `task`) as `ToolDef`s
+  without importing the `deepagents` runtime
+- Concept mapping documented in
+  [`docs/harness/adapter-deep-agents.md`](../harness/adapter-deep-agents.md)
 
-**Vanilla adapter** (fallback for custom code):
-- Simple message-based interface
-- No framework-specific translation
-- Use when your code isn't using Deep Agents or Claude Agent SDK
+**Vanilla adapter** (`framework: vanilla`, fallback):
+- Simple message-based interface for code that doesn't use a
+  supported framework
+- Carries tool rounds through context using the same grouping logic
+  as the Deep Agents adapter, so multi-turn tool-using agents work
+  out of the box
+- Surfaces sandbox built-ins (`bash`, `python`, `file_*`) and
+  registered proxy tools (e.g. `web_search`) per the agent's
+  `tools` list
 
-### v0.2+ adapters
+### Planned for v0.2+
 
 - Claude Agent SDK
 - Pydantic AI

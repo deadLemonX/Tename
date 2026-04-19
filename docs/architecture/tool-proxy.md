@@ -37,7 +37,7 @@ class Vault:
 ```
 
 **Key derivation:**
-- User provides a passphrase via env var `Tename_VAULT_PASSPHRASE` or interactive prompt
+- User provides a passphrase via env var `TENAME_VAULT_PASSPHRASE` or interactive prompt
 - We use PBKDF2 to derive a key
 - Never store the passphrase on disk
 

@@ -88,17 +88,19 @@ async def run_session(session_id: str):
 
 **What it does:** Routes model calls to the right provider, handles streaming, captures token usage.
 
-**v0.1 implementation:** Python module wrapping LiteLLM for basic provider routing, with our own code for per-provider features (Anthropic cache breakpoints, Gemini explicit cache API).
+**v0.1 implementation:** `ProviderInterface` ABC with the Anthropic
+provider implemented directly against the `anthropic` Python SDK.
+`litellm` is in the dependency tree for future providers but the
+v0.1 path does not route through it.
 
 **Supported providers in v0.1:**
 - Anthropic (direct API)
-- OpenAI (direct API)
-- Any OpenAI-compatible endpoint (for self-hosted models)
 
-**Added in v0.2:**
-- Google (Gemini)
-- Anthropic via Bedrock
-- Anthropic via Vertex AI
+**Planned for v0.2+:**
+- OpenAI (direct API)
+- OpenAI-compatible endpoints (Ollama, vLLM, LM Studio, self-hosted)
+- Google (Gemini, including the explicit cache API)
+- Anthropic via Bedrock / Vertex AI
 
 **What it does NOT do:**
 - No model selection logic (profile specifies the model)
@@ -140,7 +142,7 @@ async def run_session(session_id: str):
 
 ### Python SDK
 
-**What it does:** The library developers install (`pip install tename-sdk` — real name TBD) to use Tename from their code.
+**What it does:** The library developers install (`pip install tename`) to use Tename from their code.
 
 **v0.1 API:**
 ```python
@@ -169,9 +171,11 @@ for event in session.send("Research the EV charging market"):
 events = client.sessions.get_events(session.id)
 ```
 
-**Two modes:**
-- **In-process:** SDK and runtime run in the same Python process (simplest, for scripts)
-- **Client-server:** SDK connects to a separately-running runtime via HTTP (for longer-running systems)
+**v0.1 runs in-process only.** The SDK and runtime live in the same
+Python process. Client-server mode (SDK connects to a long-running
+runtime over HTTP) is planned for a later release; the SDK
+internals are structured so the transport can swap without a public
+API change.
 
 ## How the pieces fit together
 
